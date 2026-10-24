@@ -1,0 +1,52 @@
+.panel {
+  padding: 16px;
+  color: #dce5ef;
+  font-size: 12px;
+  line-height: 1.5;
+}
+.panel h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+}
+.panel h3 {
+  font-size: 14px;
+  margin: 18px 0 8px;
+}
+.buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.buttons button {
+  color: #e2e8f0;
+  background: #293b50;
+  border: 1px solid #64748b;
+  padding: 8px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.buttons button:hover {
+  background: #38536c;
+}
+.buttons button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.muted {
+  color: #a4b3c5;
+}
+.histogram {
+  margin: 0 0 20px;
+}
+.histogram svg {
+  width: 100%;
+  margin-top: 10px;
+}
+.extents {
+  display: flex;
+  justify-content: space-between;
+}
+.panel details {
+  margin-top: 16px;
+  overflow-wrap: anywhere;
+}

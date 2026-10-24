@@ -5,6 +5,7 @@
  */
 
 import * as THREE from 'three';
+import { parseMetadata } from './metadata';
 import type { VolumeMetadata, VariableMetadata, ColorStop, DiscreteColor } from './types';
 
 export interface LoadedVolume {
@@ -21,35 +22,7 @@ export async function loadMetadata(basePath: string, signal?: AbortSignal): Prom
   if (!response.ok) {
     throw new Error(`Failed to load metadata: ${response.statusText}`);
   }
-  const metadata = await response.json();
-  const dimensions = metadata.dimensions;
-  if (!dimensions || !['x', 'y', 'z'].every((axis) => Number.isSafeInteger(dimensions[axis]) && dimensions[axis] > 0)) {
-    throw new Error('Volume dimensions must be positive integers');
-  }
-  if (!Array.isArray(metadata.variables) || metadata.variables.length === 0) {
-    throw new Error('Volume metadata must contain at least one variable');
-  }
-  const ids = new Set();
-  for (const variable of metadata.variables) {
-    if (
-      !Number.isInteger(variable.id) ||
-      ids.has(variable.id) ||
-      !variable.file ||
-      !['uint8', 'float32'].includes(variable.dtype) ||
-      !['discrete', 'continuous'].includes(variable.type)
-    ) {
-      throw new Error('Invalid or duplicate volume variable');
-    }
-    ids.add(variable.id);
-    if (
-      variable.dtype === 'float32' &&
-      variable.type === 'continuous' &&
-      (!variable.range || !Number.isFinite(variable.range.min) || !Number.isFinite(variable.range.max))
-    ) {
-      throw new Error('Float data requires a finite physical range');
-    }
-  }
-  return metadata;
+  return parseMetadata(await response.json());
 }
 
 /**
@@ -198,57 +171,75 @@ export function createTransferFunction(variable: VariableMetadata): THREE.DataTe
   }
 }
 
-/**
- * Load all volume data and create textures
- */
-export async function loadVolume(
+/** Fetch one variable, with byte progress and exact size validation. */
+export async function loadVariable(
   basePath: string,
-  onProgress?: (loaded: number, total: number) => void,
-  signal?: AbortSignal
-): Promise<LoadedVolume> {
-  // Load metadata first
-  const metadata = await loadMetadata(basePath, signal);
-
-  const textures = new Map<number, THREE.Data3DTexture>();
-  const transferFunctions = new Map<number, THREE.DataTexture>();
-
-  const total = metadata.variables.length;
-  let loaded = 0;
-
-  try {
-    // Load each variable's data
-    for (const variable of metadata.variables) {
-      // Load raw volume data
-      const dataUrl = `${basePath}/${variable.file}`;
-      const rawData = await loadRawData(dataUrl, signal);
-
-      // Create 3D texture
-      const texture = createVolumeTexture(
-        rawData,
-        metadata.dimensions,
-        variable.dtype,
-        variable.type === 'discrete' || variable.noDataValue !== undefined
-      );
-      textures.set(variable.id, texture);
-
-      // Create transfer function
-      const transferFunction = createTransferFunction(variable);
-      transferFunctions.set(variable.id, transferFunction);
-
-      loaded++;
-      onProgress?.(loaded, total);
+  metadata: VolumeMetadata,
+  variable: VariableMetadata,
+  signal?: AbortSignal,
+  onProgress?: (message: string) => void
+): Promise<{ texture: THREE.Data3DTexture; transfer: THREE.DataTexture }> {
+  const expected =
+    metadata.dimensions.x * metadata.dimensions.y * metadata.dimensions.z * (variable.dtype === 'float32' ? 4 : 1);
+  const response = await fetch(`${basePath}/${variable.file}`, { signal });
+  if (!response.ok) throw new Error(`${variable.name}: download failed (${response.status})`);
+  const reader = response.body?.getReader();
+  let data: ArrayBuffer;
+  if (reader) {
+    const bytes = new Uint8Array(expected);
+    let offset = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (offset + value.length > expected)
+          throw new Error(`${variable.name}: data exceeds expected ${expected} bytes`);
+        bytes.set(value, offset);
+        offset += value.length;
+        onProgress?.(`Loading ${variable.name}: ${Math.round((offset / expected) * 100)}%`);
+      }
+      if (offset !== expected) throw new Error(`${variable.name}: expected ${expected} bytes, got ${offset}`);
+      data = bytes.buffer;
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      throw error;
+    } finally {
+      reader.releaseLock();
     }
+  } else {
+    data = await response.arrayBuffer();
+  }
+  const texture = createVolumeTexture(
+    data,
+    metadata.dimensions,
+    variable.dtype,
+    variable.type === 'discrete' || variable.noDataValue !== undefined
+  );
+  try {
+    return { texture, transfer: createTransferFunction(variable) };
   } catch (error) {
-    for (const texture of textures.values()) texture.dispose();
-    for (const texture of transferFunctions.values()) texture.dispose();
+    texture.dispose();
     throw error;
   }
+}
 
-  return {
-    metadata,
-    textures,
-    transferFunctions
-  };
+export function checkVolumeLimits(
+  metadata: VolumeMetadata,
+  maxTextureSize: number,
+  byteBudget = 256 * 1024 * 1024
+): void {
+  const { x, y, z } = metadata.dimensions;
+  if (Math.max(x, y, z) > maxTextureSize)
+    throw new Error(
+      `Volume dimensions exceed this device's ${maxTextureSize}-voxel 3D texture limit. Downsample the dataset.`
+    );
+  for (const variable of metadata.variables) {
+    const bytes = x * y * z * (variable.dtype === 'float32' ? 4 : 1);
+    if (bytes > byteBudget)
+      throw new Error(
+        `${variable.name} needs ${Math.ceil(bytes / 1048576)} MiB per copy (CPU and GPU). Downsample below the ${byteBudget / 1048576} MiB per-variable limit.`
+      );
+  }
 }
 
 /**

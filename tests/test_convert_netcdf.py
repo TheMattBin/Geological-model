@@ -20,7 +20,12 @@ class ConversionTests(unittest.TestCase):
             for name in ('metadata.json', 'lithology.raw', 'permeability.raw'):
                 self.assertEqual(Path(first, name).read_bytes(), Path(second, name).read_bytes())
             metadata = json.loads(Path(first, 'metadata.json').read_text())
+            self.assertEqual(metadata['schemaVersion'], 1)
+            self.assertEqual(metadata['coordinateUnit'], 'm')
+            self.assertIn('2026', metadata['provenance']['conversion'])
             dims = metadata['dimensions']
+            for variable in metadata['variables']:
+                self.assertEqual(Path(first, variable['file']).stat().st_size, dims['x'] * dims['y'] * dims['z'])
             data = np.fromfile(Path(first, 'lithology.raw'), dtype=np.uint8).reshape(dims['z'], dims['y'], dims['x'])
             self.assertTrue(metadata['synthetic'])
             self.assertNotEqual(dims['x'], dims['y'])
@@ -68,8 +73,11 @@ class ConversionTests(unittest.TestCase):
                     coordinate[:] = [0, 1, 2]
                 variable = dataset.createVariable('permeability', 'f4', ('z', 'y', 'x'))
                 variable[:] = np.arange(27).reshape(3, 3, 3)
-            converter.convert_netcdf(source, directory)
+            converter.convert_netcdf(source, directory, coordinate_system='EPSG:2326')
             metadata = json.loads(Path(directory, 'metadata.json').read_text())
+            self.assertEqual(metadata['provenance']['coordinateSystem'], 'EPSG:2326')
+            self.assertEqual(metadata['provenance']['source'], source.name)
+            self.assertNotIn('unit', metadata['variables'][0])
             self.assertEqual([v['type'] for v in metadata['variables']], ['continuous'])
             self.assertEqual(metadata['variables'][0]['range'], {'min': 0., 'max': 26.})
             with netCDF4.Dataset(source, 'a') as dataset:

@@ -1,7 +1,7 @@
 .background {
   background-color: rgba(20 20 20 / 0.8);
   pointer-events: all;
-  padding: 20px;
+  padding: 12px;
   margin: 20px;
   position: relative;
   box-shadow: 0 0 10px rgb(0 0 0 / 40%);
@@ -17,7 +17,7 @@
 }
 
 .scroll {
-  padding: 10px;
+  padding: 4px;
   flex: 1 1 auto;
   overflow-y: auto;
 }

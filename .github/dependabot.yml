@@ -1,17 +1,17 @@
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/" 
+  - package-ecosystem: 'npm'
+    directory: '/'
     schedule:
-      interval: "daily"
+      interval: 'daily'
     open-pull-requests-limit: 10
     reviewers:
-      - "TheMattBin"
+      - 'TheMattBin'
     labels:
-      - "dependencies"
-      - "automated PR"
+      - 'dependencies'
+      - 'automated PR'
     commit-message:
-      prefix: "chore"
-      include: "scope"
-    target-branch: "develop"
+      prefix: 'chore'
+      include: 'scope'
+    target-branch: 'main'
     versioning-strategy: increase

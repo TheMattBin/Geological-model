@@ -1,4 +1,11 @@
 {
+  "schemaVersion": 1,
+  "coordinateUnit": "m",
+  "provenance": {
+    "source": "Deterministic synthetic demonstration",
+    "coordinateSystem": "Local Cartesian coordinates; not georeferenced",
+    "conversion": "convert_netcdf.py sample v1; random seed 2026; Z/Y/X; full uint8 range without missing values"
+  },
   "synthetic": true,
   "description": "Synthetic folded strata with an inclined fault and displaced layers. Drag to orbit; scroll to zoom.",
   "dimensions": {

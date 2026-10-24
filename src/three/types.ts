@@ -4,6 +4,9 @@
 
 /** Metadata for the voxel volume */
 export interface VolumeMetadata {
+  schemaVersion?: 1;
+  coordinateUnit?: string;
+  provenance?: { source?: string; coordinateSystem?: string; conversion?: string };
   description?: string;
   synthetic?: boolean;
   dimensions: {
@@ -12,9 +15,9 @@ export interface VolumeMetadata {
     z: number;
   };
   bounds: {
-    x?: { min: number; max: number };
-    y?: { min: number; max: number };
-    z?: { min: number; max: number };
+    x: { min: number; max: number };
+    y: { min: number; max: number };
+    z: { min: number; max: number };
   };
   variables: VariableMetadata[];
 }
@@ -81,6 +84,7 @@ export interface VolumeRendererOptions {
   quality?: 'low' | 'medium' | 'high';
   /** Callback when loading state changes */
   onLoadingChange?: (loading: boolean) => void;
+  onProgress?: (message: string) => void;
   /** Callback when an error occurs */
   onError?: (error: Error) => void;
   /** Development-only frame performance callback */
@@ -122,4 +126,56 @@ export interface CameraState {
   position: [number, number, number];
   target: [number, number, number];
   zoom: number;
+}
+
+export interface Histogram {
+  bins: number[];
+  min: number;
+  max: number;
+  valid: number;
+  missing: number;
+}
+
+export interface VoxelInspection {
+  indices: [number, number, number];
+  coordinates: [number, number, number];
+  value: number;
+  label?: string;
+  unit?: string;
+}
+
+export interface LegendInfo {
+  id: number;
+  label: string;
+  continuous: boolean;
+  range?: [number, number];
+  unit?: string;
+  colorStops?: ColorStop[];
+  uniqueValues?: (Omit<DiscreteColor, 'color'> & { color: { r: number; g: number; b: number; a: number } })[];
+}
+
+export interface ViewSettings {
+  variableId: number | null;
+  exaggeration: number;
+  sections: { NS: number; WE: number };
+  displaySections: boolean;
+  isosurface: boolean;
+  isovalue: number;
+  opacity: number;
+  valueWindow: [number, number];
+  hiddenClasses: Record<string, number[]>;
+}
+
+export interface DisplaySettings {
+  enableGrid: boolean;
+  displayLegend: boolean;
+  displayFault: boolean;
+}
+
+export interface SavedView {
+  version: 1;
+  dataset: string;
+  settings: ViewSettings;
+  display: DisplaySettings;
+  camera: CameraState;
 }

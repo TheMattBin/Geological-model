@@ -65,6 +65,7 @@ const Chip = ({ index, color, enabled, onClick, value, label }) => {
   return (
     <button
       key={index}
+      aria-pressed={enabled}
       style={{ backgroundColor, border: `1.5px solid ${cssColor}` }}
       className={styles.chip}
       datavalue={value}

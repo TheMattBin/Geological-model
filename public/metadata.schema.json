@@ -1,0 +1,262 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/TheMattBin/Geological-model/blob/main/public/metadata.schema.json",
+  "title": "Geological volume metadata v1",
+  "description": "Versionless legacy files use v1 semantics. The runtime validator additionally checks ordered ranges, unique IDs/classes/positions, safe byte counts, and missing-value collisions.",
+  "type": "object",
+  "required": ["dimensions", "bounds", "variables"],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "synthetic": {
+      "type": "boolean"
+    },
+    "coordinateUnit": {
+      "type": "string",
+      "minLength": 1
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "coordinateSystem": {
+          "type": "string",
+          "minLength": 1
+        },
+        "conversion": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "dimensions": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "y": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "z": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "bounds": {
+      "type": "object",
+      "required": ["x", "y", "z"],
+      "properties": {
+        "x": {
+          "type": "object",
+          "required": ["min", "max"],
+          "properties": {
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "description": "Finite min <= max; bounds and encodingRange require min < max."
+        },
+        "y": {
+          "type": "object",
+          "required": ["min", "max"],
+          "properties": {
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "description": "Finite min <= max; bounds and encodingRange require min < max."
+        },
+        "z": {
+          "type": "object",
+          "required": ["min", "max"],
+          "properties": {
+            "min": {
+              "type": "number"
+            },
+            "max": {
+              "type": "number"
+            }
+          },
+          "description": "Finite min <= max; bounds and encodingRange require min < max."
+        }
+      }
+    },
+    "variables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "file", "dtype", "type", "colormap"],
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "file": {
+            "type": "string",
+            "pattern": "^[\\w.-]+(?:/[\\w.-]+)*$",
+            "description": "Relative path inside dataset; parent traversal is rejected."
+          },
+          "dtype": {
+            "enum": ["uint8", "float32"]
+          },
+          "type": {
+            "enum": ["discrete", "continuous"]
+          },
+          "unit": {
+            "type": "string",
+            "minLength": 1
+          },
+          "range": {
+            "type": "object",
+            "required": ["min", "max"],
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            },
+            "description": "Finite min <= max; bounds and encodingRange require min < max."
+          },
+          "encodingRange": {
+            "type": "object",
+            "required": ["min", "max"],
+            "properties": {
+              "min": {
+                "type": "number"
+              },
+              "max": {
+                "type": "number"
+              }
+            },
+            "description": "Finite min <= max; bounds and encodingRange require min < max."
+          },
+          "noDataValue": {
+            "type": "number"
+          },
+          "colormap": {
+            "type": "array",
+            "minItems": 1
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "type": {
+                  "const": "discrete"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "colormap": {
+                  "items": {
+                    "type": "object",
+                    "required": ["value", "label", "color"],
+                    "properties": {
+                      "value": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 255
+                      },
+                      "label": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "color": {
+                        "type": "array",
+                        "minItems": 4,
+                        "maxItems": 4,
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 255
+                        }
+                      },
+                      "enabled": {
+                        "type": "boolean"
+                      },
+                      "role": {
+                        "const": "fault"
+                      },
+                      "sourceValue": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "colormap": {
+                  "items": {
+                    "type": "object",
+                    "required": ["position", "color"],
+                    "properties": {
+                      "position": {
+                        "type": "number",
+                        "minimum": 0,
+                        "maximum": 1
+                      },
+                      "color": {
+                        "type": "array",
+                        "minItems": 4,
+                        "maxItems": 4,
+                        "items": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 255
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "dtype": {
+                  "const": "float32"
+                },
+                "type": {
+                  "const": "continuous"
+                }
+              }
+            },
+            "then": {
+              "required": ["range"]
+            }
+          }
+        ]
+      }
+    }
+  }
+}

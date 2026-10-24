@@ -1,7 +1,7 @@
 import Background from '../Background/Background';
 import Legend from '../Legend/Legend';
 import * as styles from './MenuPanel.module.css';
-import { useUIContext } from '../../UIContext.jsx';
+import { useUIContext } from '../../UIContext';
 import PropTypes from 'prop-types';
 
 /**

@@ -169,7 +169,7 @@ def save_binary(data: np.ndarray, filepath: str, dtype: str = 'uint8'):
     print(f"Saved: {filepath} ({os.path.getsize(filepath) / 1024 / 1024:.2f} MB)")
 
 
-def convert_netcdf(input_path: str, output_dir: str, lithology_var: str = None, permeability_var: str = None):
+def convert_netcdf(input_path: str, output_dir: str, lithology_var: str = None, permeability_var: str = None, coordinate_system: str = None):
     """Main conversion function."""
     output_path = Path(output_dir)
     output_path.mkdir(parents=True, exist_ok=True)
@@ -202,6 +202,13 @@ def convert_netcdf(input_path: str, output_dir: str, lithology_var: str = None, 
             raise ValueError(f'Variable not found: {requested}')
 
     metadata = {
+        'schemaVersion': 1,
+        'coordinateUnit': 'm',
+        'provenance': {
+            'source': Path(input_path).name,
+            'coordinateSystem': coordinate_system or 'Unspecified projected coordinate system',
+            'conversion': f'convert_netcdf.py v1; Z/Y/X; cell-edge bounds in metres; uint8 0–254, missing=255; lithology={lithology_var}; continuous={permeability_var}',
+        },
         'dimensions': {},
         'bounds': data['bounds'],
         'synthetic': False,
@@ -273,7 +280,7 @@ def convert_netcdf(input_path: str, output_dir: str, lithology_var: str = None, 
             'file': 'permeability.raw',
             'dtype': 'uint8',
             'type': 'continuous',
-            'unit': var_data.get('units', 'md'),
+            **({'unit': var_data['units']} if var_data.get('units') else {}),
             'range': {'min': min_val, 'max': max_val},
             'encodingRange': {'min': 0, 'max': 254 / 255},
             'noDataValue': 255,
@@ -319,6 +326,13 @@ def create_sample_data(output_dir: str):
 
     # Create metadata
     metadata = {
+        'schemaVersion': 1,
+        'coordinateUnit': 'm',
+        'provenance': {
+            'source': 'Deterministic synthetic demonstration',
+            'coordinateSystem': 'Local Cartesian coordinates; not georeferenced',
+            'conversion': 'convert_netcdf.py sample v1; random seed 2026; Z/Y/X; full uint8 range without missing values',
+        },
         'synthetic': True,
         'description': 'Synthetic folded strata with an inclined fault and displaced layers. Drag to orbit; scroll to zoom.',
         'dimensions': {'x': dim_x, 'y': dim_y, 'z': dim_z},
@@ -368,6 +382,7 @@ if __name__ == '__main__':
     parser.add_argument('--output-dir', '-o', default='./public/data', help='Output directory')
     parser.add_argument('--lithology-var', help='Name of lithology variable in NetCDF')
     parser.add_argument('--permeability-var', help='Name of permeability variable in NetCDF')
+    parser.add_argument('--coordinate-system', help='Projected CRS identifier or description to record (does not reproject)')
     parser.add_argument('--sample', action='store_true', help='Generate sample test data')
 
     args = parser.parse_args()
@@ -375,7 +390,7 @@ if __name__ == '__main__':
     if args.sample:
         create_sample_data(args.output_dir)
     elif args.input:
-        convert_netcdf(args.input, args.output_dir, args.lithology_var, args.permeability_var)
+        convert_netcdf(args.input, args.output_dir, args.lithology_var, args.permeability_var, args.coordinate_system)
     else:
         print("Usage: python convert_netcdf.py <input.nc> --output-dir ./public/data")
         print("   or: python convert_netcdf.py --sample --output-dir ./public/data")

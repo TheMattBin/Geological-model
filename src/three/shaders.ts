@@ -84,6 +84,7 @@ uniform vec3 uBoundsMin;
 uniform vec3 uBoundsMax;
 uniform int uSteps;
 uniform float uDensity;
+uniform vec2 uWindow;
 uniform bool uSliceXEnabled;
 uniform float uSliceXMin;
 uniform float uSliceXMax;
@@ -119,11 +120,11 @@ float rawValue(vec3 pos) {
 }
 
 bool isNoData(float value) {
-    return isnan(value) || isinf(value) || (uHasNoData && abs(value - uNoDataValue) < 1e-6);
+    return isnan(value) || isinf(value) || (uHasNoData && (uFloatData ? value == uNoDataValue : abs(value - uNoDataValue) < 0.5 / 255.0));
 }
 
 float normalizedValue(float value) {
-    return clamp((value - uValueRange.x) / max(uValueRange.y - uValueRange.x, 1e-8), 0.0, 1.0);
+    return uValueRange.y == uValueRange.x ? 0.0 : clamp((value - uValueRange.x) / (uValueRange.y - uValueRange.x), 0.0, 1.0);
 }
 
 vec3 toLinear(vec3 color) {
@@ -191,6 +192,7 @@ void main() {
         float raw = rawValue(pos);
         if (isNoData(raw)) { previous = -1.0; continue; }
         float value = normalizedValue(raw);
+        if (!uDiscreteMode && (value < uWindow.x || value > uWindow.y)) { previous = -1.0; continue; }
 
         if (uIsosurfaceEnabled && !uDiscreteMode) {
             if (previous >= 0.0 && (previous - uIsosurfaceValue) * (value - uIsosurfaceValue) <= 0.0
