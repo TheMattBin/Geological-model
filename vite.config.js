@@ -1,23 +1,23 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { resolve } from "path";
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import { resolve } from 'path';
 
 export default defineConfig({
-  base: "./",
+  base: './',
   plugins: [react()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
-      '@three': resolve(__dirname, 'src/three'),
-    },
+      '@': resolve(import.meta.dirname, 'src'),
+      '@three': resolve(import.meta.dirname, 'src/three')
+    }
   },
   build: {
     rollupOptions: {
-      input: resolve(__dirname, 'index.html'),
-    },
+      input: resolve(import.meta.dirname, 'index.html')
+    }
   },
   server: {
     port: 3000,
-    open: true,
-  },
+    open: true
+  }
 });

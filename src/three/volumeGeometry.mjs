@@ -14,13 +14,14 @@ export function getNormalizedVolumeSize(metadata, verticalExaggeration = 1) {
   return {
     x: spans[0] / maxSpan,
     y: spans[1] / maxSpan,
-    z: (spans[2] / maxSpan) * exaggeration,
+    z: (spans[2] / maxSpan) * exaggeration
   };
 }
 
-export function getCameraDistance(size, fieldOfView = 45, margin = 1.35) {
+export function getCameraDistance(size, fieldOfView = 45, margin = 1.35, aspect = 1) {
   const radius = Math.hypot(size.x, size.y, size.z) / 2;
-  const halfFovRadians = (fieldOfView * Math.PI) / 360;
+  const verticalHalfFov = (fieldOfView * Math.PI) / 360;
+  const halfFovRadians = Math.min(verticalHalfFov, Math.atan(Math.tan(verticalHalfFov) * aspect));
   return (radius / Math.sin(halfFovRadians)) * margin;
 }
 

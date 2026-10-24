@@ -5,11 +5,11 @@ import { VolumeRenderer } from '../../three/VolumeRenderer';
 
 /**
  * Scene3D - Three.js 3D scene container component
- * 
+ *
  * Replaces the ArcGIS Map component with a Three.js-based volume renderer.
  * Manages the WebGL context, camera, and volume rendering.
  */
-const Scene3D = ({ children, dataPath = './data' }) => {
+const Scene3D = ({ children, dataPath = './data', onMetadataChange }) => {
   const containerRef = useRef(null);
   const rendererRef = useRef(null);
   const [volumeRenderer, setVolumeRenderer] = useState(null);
@@ -20,6 +20,12 @@ const Scene3D = ({ children, dataPath = './data' }) => {
 
   // Initialize the volume renderer after container has dimensions
   useEffect(() => {
+    let cancelled = false;
+    let initializationFrame;
+    setLoading(true);
+    setError(null);
+    setMetadata(null);
+    onMetadataChange?.(null);
     if (!containerRef.current) {
       console.error('Scene3D: Container ref is null');
       return;
@@ -27,42 +33,34 @@ const Scene3D = ({ children, dataPath = './data' }) => {
 
     // Prevent double initialization in StrictMode
     if (rendererRef.current) {
-      console.log('Scene3D: Renderer already exists, skipping initialization');
       return;
     }
 
     // Clean up any leftover canvas elements from previous instances
     const container = containerRef.current;
     const existingCanvases = container.querySelectorAll('canvas');
-    existingCanvases.forEach(canvas => {
-      console.log('Scene3D: Removing leftover canvas');
+    existingCanvases.forEach((canvas) => {
       canvas.remove();
     });
 
     // Wait for container to have dimensions (CSS layout not yet applied on first render)
     const initializeRenderer = () => {
-      if (!container) return;
-      
+      if (cancelled || !container) return;
+
       // Double-check we haven't been initialized in the meantime (race condition guard)
       if (rendererRef.current) {
-        console.log('Scene3D: Renderer already initialized, aborting');
         return;
       }
-      
+
       const width = container.clientWidth;
       const height = container.clientHeight;
-      
-      console.log('Scene3D: Container dimensions:', width, 'x', height);
-      
+
       // If container has zero dimensions, wait and try again
       if (width === 0 || height === 0) {
-        console.log('Scene3D: Container has zero dimensions, waiting...');
-        requestAnimationFrame(initializeRenderer);
+        initializationFrame = requestAnimationFrame(initializeRenderer);
         return;
       }
-      
-      console.log('Scene3D: Initializing VolumeRenderer');
-      
+
       let renderer;
       try {
         // Create volume renderer
@@ -75,12 +73,11 @@ const Scene3D = ({ children, dataPath = './data' }) => {
           onError: (err) => {
             console.error('Volume renderer error:', err);
             setError(err.message);
-          },
+          }
         });
 
         rendererRef.current = renderer;
         setVolumeRenderer(renderer);
-        console.log('Scene3D: VolumeRenderer created successfully');
       } catch (err) {
         console.error('Scene3D: Failed to create VolumeRenderer:', err);
         setError(`Failed to create renderer: ${err.message}`);
@@ -89,32 +86,35 @@ const Scene3D = ({ children, dataPath = './data' }) => {
       }
 
       // Load volume data
-      console.log('Scene3D: Loading data from', dataPath);
-      renderer.loadData(dataPath)
+      renderer
+        .loadData(dataPath)
         .then(() => {
-          console.log('Scene3D: Data loaded successfully');
+          if (cancelled) return;
           setMetadata(renderer.getMetadata());
+          onMetadataChange?.(renderer.getMetadata());
           setLoading(false);
         })
         .catch((err) => {
+          if (cancelled) return;
           console.error('Failed to load volume data:', err);
           setError(`Failed to load data: ${err.message}`);
           setLoading(false);
         });
     };
-    
+
     // Start initialization after a short delay to let CSS apply
-    requestAnimationFrame(initializeRenderer);
+    initializationFrame = requestAnimationFrame(initializeRenderer);
 
     // Cleanup on unmount
     return () => {
-      console.log('Scene3D: Cleanup - disposing renderer');
+      cancelled = true;
+      cancelAnimationFrame(initializationFrame);
       if (rendererRef.current) {
         rendererRef.current.dispose();
         rendererRef.current = null;
       }
     };
-  }, [dataPath]);
+  }, [dataPath, onMetadataChange]);
 
   // Callback for children to interact with the renderer
   const getRenderer = useCallback(() => rendererRef.current, []);
@@ -137,7 +137,7 @@ const Scene3D = ({ children, dataPath = './data' }) => {
           return cloneElement(child, {
             volumeRenderer,
             metadata,
-            getRenderer,
+            getRenderer
           });
         }
         return child;
@@ -149,6 +149,7 @@ const Scene3D = ({ children, dataPath = './data' }) => {
 Scene3D.propTypes = {
   children: PropTypes.node,
   dataPath: PropTypes.string,
+  onMetadataChange: PropTypes.func
 };
 
 export default Scene3D;

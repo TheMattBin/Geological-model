@@ -1,138 +1,125 @@
 import Background from '../Background/Background';
 import Title from '../Title/Title';
 import * as styles from './VisualizationPanel.module.css';
-import { variables } from '../../config';
-import { useEffect, useState } from 'react';
 import PropTypes from 'prop-types';
 
-/**
- * VisualizationPanel component
- */
 const VisualizationPanel = ({
+  variables,
   selectedVariable,
-  setSelectedVariable,
+  setSelectedVariableId,
   exaggeration,
   setExaggeration,
   sections,
   setSections,
   displaySections,
   setDisplaySections,
-  dimensions
-}) => {
-  const [currentNSSection, setCurrentNSSection] = useState(null);
-  const [currentWESection, setCurrentWESection] = useState(null);
-
-  useEffect(() => {
-    if (displaySections && currentNSSection != null && currentWESection != null && sections && sections.length > 0) {
-      console.log('VisualizationPanel: Updating sections, NS:', currentNSSection, 'WE:', currentWESection);
-      // Create new array to ensure React detects the change
-      let updatedSections = sections.map((section) => {
-        const newSection = { ...section };
-        if (section.label === `ns${currentNSSection}` || section.label === `we${currentWESection}`) {
-          newSection.enabled = true;
-        } else {
-          newSection.enabled = false;
-        }
-        return newSection;
-      });
-      setSections(updatedSections);
-    }
-  }, [currentNSSection, currentWESection, displaySections]);
-
-  useEffect(() => {
-    if (dimensions && dimensions.length > 0) {
-      setCurrentNSSection(Math.floor(dimensions[0] / 2));
-      setCurrentWESection(Math.floor(dimensions[1] / 2));
-    }
-  }, [dimensions]);
-
-
-
-  return (
-    <Background title='Visualization' size='small'>
-      <Title text='Variables' />
-      <div className={styles.radioGroup}>
-        {variables.map((variable, index) => (
-          <label key={index} className={styles.radioLabel}>
+  isosurface,
+  setIsosurface,
+  isovalue,
+  setIsovalue
+}) => (
+  <Background title='Visualization' size='small'>
+    <Title text='Variables' />
+    <div className={styles.radioGroup}>
+      {variables.map((variable) => (
+        <label key={variable.id} className={styles.radioLabel}>
+          <input
+            type='radio'
+            name='variable'
+            checked={selectedVariable?.id === variable.id}
+            onChange={() => setSelectedVariableId(variable.id)}
+            className={styles.radio}
+          />
+          <span>{variable.name}</span>
+        </label>
+      ))}
+    </div>
+    <div className={styles.dynamicSections}>
+      <label className={styles.switchLabel}>
+        <span>Display sections</span>
+        <input
+          type='checkbox'
+          checked={displaySections}
+          onChange={(e) => setDisplaySections(e.target.checked)}
+          className={styles.toggleSwitch}
+        />
+      </label>
+      {displaySections &&
+        ['NS', 'WE'].map((orientation) => (
+          <label key={orientation} className={styles.sectionControl}>
+            <span>{orientation === 'NS' ? 'N–S cut (east–west position)' : 'W–E cut (north–south position)'}</span>
             <input
-              type="radio"
-              name="variable"
-              value={variable.name}
-              checked={selectedVariable.name === variable.name}
-              onChange={() => setSelectedVariable(variable)}
-              className={styles.radio}
+              type='range'
+              min={1}
+              max={100}
+              step={1}
+              value={Math.round(sections[orientation] * 100)}
+              onChange={(e) => setSections({ ...sections, [orientation]: Number(e.target.value) / 100 })}
+              className={styles.slider}
             />
-            <span>{variable.name}</span>
+            <output>{Math.round(sections[orientation] * 100)}%</output>
           </label>
         ))}
-      </div>
-
+    </div>
+    {selectedVariable?.type === 'continuous' && (
       <div className={styles.dynamicSections}>
-          <label className={styles.switchLabel}>
-            <span>Display sections</span>
+        <label className={styles.switchLabel}>
+          <span>Isosurface</span>
+          <input
+            type='checkbox'
+            checked={isosurface}
+            onChange={(e) => setIsosurface(e.target.checked)}
+            className={styles.toggleSwitch}
+          />
+        </label>
+        {isosurface && (
+          <label className={styles.sectionControl}>
+            <span>Isosurface value {selectedVariable.unit ? `(${selectedVariable.unit})` : ''}</span>
             <input
-              type="checkbox"
-              checked={displaySections}
-              onChange={(e) => setDisplaySections(e.target.checked)}
-              className={styles.toggleSwitch}
+              type='range'
+              min={selectedVariable.range?.min ?? 0}
+              max={selectedVariable.range?.max ?? 1}
+              step={((selectedVariable.range?.max ?? 1) - (selectedVariable.range?.min ?? 0)) / 100 || 1}
+              value={isovalue}
+              onChange={(e) => setIsovalue(Number(e.target.value))}
+              className={styles.slider}
             />
+            <output>{isovalue.toPrecision(3)}</output>
           </label>
-          {displaySections && dimensions && dimensions.length > 0 && (
-            <div className={styles.sections}>
-              <img className={styles.surfaceGraphic} src='./assets/section-north-south.png' alt="N-S section" />
-              <input
-                type="range"
-                className={styles.slider}
-                min={1}
-                max={dimensions[0]}
-                step={1}
-                value={currentNSSection || 1}
-                onChange={(e) => setCurrentNSSection(Number(e.target.value))}
-              />
-
-              <img className={styles.surfaceGraphic} src='./assets/section-west-east.png' alt="W-E section" />
-              <input
-                type="range"
-                className={styles.slider}
-                min={1}
-                max={dimensions[1]}
-                step={1}
-                value={currentWESection || 1}
-                onChange={(e) => setCurrentWESection(Number(e.target.value))}
-              />
-            </div>
-          )}
-        </div>
-
-      <div className='separator'></div>
-
-      <label className={styles.label}>Vertical exaggeration</label>
-      <div className={styles.slices}>
-        <input
-          type="range"
-          className={styles.slider}
-          min={1}
-          max={5}
-          step={1}
-          value={exaggeration}
-          onChange={(e) => setExaggeration(Number(e.target.value))}
-        />
-        <span className={styles.sliderValue}>{exaggeration}x</span>
+        )}
       </div>
-    </Background>
-  );
-};
+    )}
+    <div className='separator'></div>
+    <label className={styles.sectionControl}>
+      <span>Vertical exaggeration</span>
+      <input
+        type='range'
+        min={1}
+        max={5}
+        step={1}
+        value={exaggeration}
+        onChange={(e) => setExaggeration(Number(e.target.value))}
+        className={styles.slider}
+      />
+      <output>{exaggeration}x</output>
+    </label>
+  </Background>
+);
 
 VisualizationPanel.propTypes = {
+  variables: PropTypes.array.isRequired,
   selectedVariable: PropTypes.object,
-  setSelectedVariable: PropTypes.func,
+  setSelectedVariableId: PropTypes.func,
   exaggeration: PropTypes.number,
   setExaggeration: PropTypes.func,
-  sections: PropTypes.array,
+  sections: PropTypes.object,
   setSections: PropTypes.func,
   displaySections: PropTypes.bool,
   setDisplaySections: PropTypes.func,
-  dimensions: PropTypes.array,
+  isosurface: PropTypes.bool,
+  setIsosurface: PropTypes.func,
+  isovalue: PropTypes.number,
+  setIsovalue: PropTypes.func
 };
 
 export default VisualizationPanel;

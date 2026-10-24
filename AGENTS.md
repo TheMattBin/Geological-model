@@ -1,33 +1,33 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Architecture and data conventions
 
-This is a React 18 + Vite application for interactive Hong Kong geological volume visualization. Application code is in `src/`: `App/` contains the main shell, `components/` contains UI panels and controls, and `three/` contains the TypeScript volume renderer, shaders, data loader, and shared types. `src/config.js` holds visualization configuration, `src/UIContext.jsx` holds shared UI state, and `src/main.jsx` is the entry point. Static voxel data and metadata belong in `public/data/`; images and other static resources are in `public/assets/`. Use `scripts/convert_netcdf.py` for NetCDF-to-raw data conversion.
+React owns UI state; `VolumeController` synchronizes it with the Three.js renderer after metadata loads. Keep GPU resources and render scheduling in `src/three/VolumeRenderer.ts`, texture loading in `dataLoader.ts`, and GLSL in `shaders.ts`.
 
-## Build, Test, and Development Commands
+- X is east, Y is north, and Z is elevation/up. Set camera up before constructing orbit controls. Vertical exaggeration scales only displayed Z.
+- Binary volume order is Z/Y/X, with X changing fastest. Dimensions describe voxel counts; bounds describe physical cell edges in a common unit.
+- N–S sections have constant X; W–E sections have constant Y. Section positions are normalized fractions of the original bounds, independent of exaggeration.
+- Metadata is authoritative for variable IDs, names, ranges, units, colors, and fault classes (`role: 'fault'`). `src/config.js` selects the dataset path.
+- Class values use nearest sampling. Continuous opacity must account for ray-step distance. Shader output and material blending both use premultiplied alpha; palette colors are sRGB.
+- Reserve missing-data values explicitly in metadata. Never interpret a missing voxel as valid class zero. Converted uint8 continuous data uses 0–254, with 255 reserved for missing data; the bundled sample uses the full 0–255 range without a missing-data sentinel.
+- The bundled dataset is synthetic. Preserve that disclosure when changing UI copy or sample generation. Never commit private datasets or credentials.
 
-- `npm ci` — install the lockfile-pinned dependencies (use this in CI).
-- `npm run dev` — start the Vite development server at `http://localhost:3000`.
-- `npm run build` — create the production bundle in `dist/`; this is the primary CI validation.
-- `npm test` — run the Node-based renderer quality policy tests.
-- `npm run preview` — serve the production bundle locally for a final check.
-- `npm run convert-sample` — generate sample voxel files under `public/data/`.
-- `python scripts/convert_netcdf.py <file.nc> --output-dir ./public/data` — convert a custom NetCDF dataset.
+## Implementation
 
-The automated test coverage currently focuses on pure renderer-quality policy logic; for UI or GPU shader changes, also run the build and manually exercise the affected visualization path in the browser.
+Use two spaces, semicolons, single quotes, and the 120-column print width in `.prettierrc.json`. Keep component styles in adjacent CSS modules and shared TypeScript interfaces in `src/three/types.ts`. Prefer the existing `@` and `@three` aliases.
 
-## Coding Style & Naming Conventions
+Keep rendering demand-driven. Cancel pending initialization and fetches during cleanup; dispose textures, geometry, materials, controls, and observers. Use animation-frame intervals for frame cadence; CPU submission time is not GPU rendering time.
 
-Use two spaces, semicolons, single quotes, and a 120-column print width, matching `.prettierrc.json`; do not use tabs. Name React component directories and component files in PascalCase (for example, `VisualizationPanel/VisualizationPanel.jsx`), utility files in camelCase, and TypeScript types in `src/three/types.ts`. Keep component styles in adjacent `*.module.css` files and prefer the existing `@` and `@three` aliases.
+## Validation
 
-## Testing Guidelines
+Use the Node version in `.nvmrc` and `npm ci`. Run `npm test`, `npm run typecheck`, and `npm run build` for application changes.
 
-No coverage threshold is configured. Run `npm test` and `npm run build`; when changing `public/data/`, also confirm metadata dimensions, variable filenames, and browser loading behavior.
+For UI, shader, or loading changes, run `npm run test:browser` (install Chromium with `npx playwright install chromium` first). Review screenshots in `test-results/` and exercise both variables, section endpoints, class/fault visibility, grid, exaggeration, and isosurfaces. Software WebGL tests establish correctness, not hardware performance.
 
-## Commit & Pull Request Guidelines
+For converter or sample-data changes, install `scripts/requirements.txt` in a Python virtual environment and run `npm run test:data`. Confirm raw byte counts match metadata and sample regeneration is deterministic. Run browser tests after changing `public/data/`.
 
-Use short imperative commits with a conventional prefix and optional scope, such as `feat(volume-rendering): add ...`, `fix(ui): ...`, `docs: ...`, or `chore: ...`. Pull requests should explain the user-visible change, link the relevant issue (create one first for major changes), include screenshots or a brief recording for visual changes, and report validation performed. Keep generated `dist/` output and secrets out of commits.
+For dependency changes, run `npm audit --audit-level moderate`. Keep validation read-only with respect to dependency versions; update the lockfile deliberately.
 
-## Security & Configuration Tips
+## Commits and pull requests
 
-Do not commit credentials or private datasets. Review `src/config.js` when changing variables, paths, or rendering defaults, and run `npm audit --audit-level moderate` when dependency changes are proposed.
+Use short imperative conventional commits, such as `fix(renderer): correct section axes`. Pull requests should explain user-visible changes, link the relevant issue, include screenshots for visual changes, and report validation and limitations. Create an issue before opening a PR for a major change. Keep generated `dist/`, test results, and secrets out of commits.

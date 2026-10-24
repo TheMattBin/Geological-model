@@ -8,7 +8,7 @@ test('starts with a balanced profile and caps the device pixel ratio', () => {
   assert.deepEqual(controller.profile, {
     tier: 'balanced',
     steps: 96,
-    pixelRatio: 1.25,
+    pixelRatio: 1.25
   });
   assert.equal(getEffectivePixelRatio(controller.profile, 2), 1.25);
 });
@@ -39,4 +39,10 @@ test('recovers one tier after sustained fast frames', () => {
 
   assert.equal(controller.profile.tier, 'high');
   assert.equal(controller.profile.steps, 160);
+});
+
+test('recovers using actual 60 Hz animation-frame intervals', () => {
+  const controller = new AdaptiveQualityController({ initialTier: 'interaction' });
+  for (let frame = 0; frame < 120; frame++) controller.update(1000 / 60, false);
+  assert.equal(controller.profile.tier, 'high');
 });

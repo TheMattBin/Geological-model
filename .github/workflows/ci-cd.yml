@@ -17,14 +17,41 @@ jobs:
     - name: Setup Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
         cache: 'npm'
 
     - name: Install dependencies
       run: npm ci
 
     - name: Run security audit
-      run: npm audit fix --audit-level moderate || true
+      run: npm audit --audit-level moderate
+
+    - name: Test renderer policies and types
+      run: |
+        npm test
+        npm run typecheck
+
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Test data conversion
+      run: |
+        pip install -r scripts/requirements.txt
+        npm run test:data
+
+    - name: Install browser
+      run: npx playwright install --with-deps chromium
+
+    - name: Test browser rendering
+      run: npm run test:browser
+
+    - name: Upload browser results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: browser-results
+        path: test-results/
 
     - name: Build application
       run: npm run build

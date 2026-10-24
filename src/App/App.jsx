@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { dataPath } from '../config';
 import { UIProvider } from '../UIContext.jsx';
 import Scene3D from '../components/Scene3D/Scene3D';
 import Title from '../components/Title/Title';
@@ -6,32 +7,38 @@ import MenuPanel from '../components/MenuPanel/MenuPanel';
 import VisualizationPanel from '../components/VisualizationPanel/VisualizationPanel';
 import VolumeController from '../components/VolumeController/VolumeController';
 import ErrorBoundary from '../components/ErrorBoundary/ErrorBoundary';
-import { variables } from '../config';
 import * as styles from './App.module.css';
 
 /**
  * App component using Three.js for volume rendering
  */
 export const App = () => {
-  const [selectedVariable, setSelectedVariable] = useState(variables[0]);
+  const [metadata, setMetadata] = useState(null);
+  const [selectedVariableId, setSelectedVariableId] = useState(null);
+  const variables = metadata?.variables ?? [];
+  const selectedVariable = variables.find((variable) => variable.id === selectedVariableId) ?? variables[0];
+  const [isosurface, setIsosurface] = useState(false);
+  const [isovalue, setIsovalue] = useState(0.5);
+  useEffect(() => {
+    const range = selectedVariable?.range;
+    setIsovalue(range ? (range.min + range.max) / 2 : 0.5);
+  }, [selectedVariable]);
   const [exaggeration, setExaggeration] = useState(1);
   const [legendInfo, setLegendInfo] = useState(null);
-  const [sections, setSections] = useState([]);
+  const [sections, setSections] = useState({ NS: 0.68, WE: 0.82 });
   const [displaySections, setDisplaySections] = useState(true);
-  const [dimensions, setDimensions] = useState([]);
 
   return (
     <UIProvider>
       <ErrorBoundary>
-        <Scene3D dataPath="./data">
+        <Scene3D dataPath={dataPath} onMetadataChange={setMetadata}>
           <VolumeController
             selectedVariable={selectedVariable}
             exaggeration={exaggeration}
             sections={sections}
-            setSections={setSections}
             displaySections={displaySections}
-            dimensions={dimensions}
-            setDimensions={setDimensions}
+            isosurface={isosurface}
+            isovalue={isovalue}
             legendInfo={legendInfo}
             setLegendInfo={setLegendInfo}
           />
@@ -39,45 +46,43 @@ export const App = () => {
       </ErrorBoundary>
       <div className={styles.appLayout}>
         <header className={styles.appTitle}>
-          <Title text='Hong Kong Geological Model' size='large'></Title>
+          <Title text='Geological Volume Explorer' size='large'></Title>
         </header>
         <div className={styles.appContent}>
           <div className={styles.leftPane}>
             <ErrorBoundary>
-              <MenuPanel legendInfo={legendInfo} setLegendInfo={setLegendInfo} />
+              <MenuPanel metadata={metadata} legendInfo={legendInfo} setLegendInfo={setLegendInfo} />
             </ErrorBoundary>
           </div>
           <div className={styles.rightPane}>
             <ErrorBoundary>
               <VisualizationPanel
                 selectedVariable={selectedVariable}
-                setSelectedVariable={setSelectedVariable}
+                variables={variables}
+                setSelectedVariableId={setSelectedVariableId}
                 exaggeration={exaggeration}
                 setExaggeration={setExaggeration}
                 sections={sections}
                 setSections={setSections}
                 displaySections={displaySections}
                 setDisplaySections={setDisplaySections}
-                dimensions={dimensions}
+                isosurface={isosurface}
+                setIsosurface={setIsosurface}
+                isovalue={isovalue}
+                setIsovalue={setIsovalue}
               />
             </ErrorBoundary>
           </div>
         </div>
         <footer className={styles.appFooter}>
           <p>
-            Dataset from{' '}
-            <a href='https://www.cedd.gov.hk/eng/' target='_blank'>
-              Geotechnical Engineering Office (GEO)
-            </a>{' '}
-            and{' '}
-            <a href='https://hkust.edu.hk/' target='_blank'>
-              Hong Kong University of Science and Technology
-            </a>
-            .
+            {metadata?.synthetic
+              ? 'Synthetic demonstration dataset · Not a surveyed Hong Kong model.'
+              : (metadata?.description ?? 'Explore geological volume data.')}
           </p>
           <p className={styles.Logo}>
-            <a href='https://github.com/TheMattBin' target='_blank'>
-              <img src='./assets/github_logo.png'></img>
+            <a href='https://github.com/TheMattBin' target='_blank' rel='noreferrer'>
+              <img src='./assets/github_logo.png' alt='GitHub'></img>
             </a>
           </p>
         </footer>

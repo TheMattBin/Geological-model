@@ -2,6 +2,14 @@
   cursor: pointer;
 }
 
+.sectionControl {
+  display: block;
+  margin: 16px 20px;
+  color: #cbd5e1;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .surfaces,
 .dynamicSections,
 .slices {

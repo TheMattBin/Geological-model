@@ -1,6 +1,6 @@
 /**
  * GLSL Shaders for volumetric rendering using ray marching
- * 
+ *
  * These shaders implement direct volume rendering with:
  * - Ray marching through a 3D texture
  * - Transfer function for color mapping
@@ -70,236 +70,157 @@ precision highp sampler3D;
 
 in vec3 vOrigin;
 in vec3 vDirection;
-
 out vec4 fragColor;
 
-// Volume data texture
 uniform sampler3D uVolumeData;
-
-// Transfer function (1D texture or direct colors)
 uniform sampler2D uTransferFunction;
 uniform bool uDiscreteMode;
-uniform int uNumClasses;
-
-// Volume dimensions and bounds
+uniform bool uFloatData;
+uniform vec2 uValueRange;
+uniform bool uHasNoData;
+uniform float uNoDataValue;
 uniform vec3 uVolumeDimensions;
 uniform vec3 uBoundsMin;
 uniform vec3 uBoundsMax;
-
-// Rendering parameters
 uniform int uSteps;
-uniform float uAlphaScale;
-uniform float uBrightness;
-
-// Clipping planes for slices
+uniform float uDensity;
 uniform bool uSliceXEnabled;
 uniform float uSliceXMin;
 uniform float uSliceXMax;
-
 uniform bool uSliceYEnabled;
 uniform float uSliceYMin;
 uniform float uSliceYMax;
-
 uniform bool uSliceZEnabled;
 uniform float uSliceZMin;
 uniform float uSliceZMax;
-
-// Section planes
 uniform bool uSectionNSEnabled;
 uniform float uSectionNSPosition;
-
 uniform bool uSectionWEEnabled;
 uniform float uSectionWEPosition;
-
-// Isosurface
 uniform bool uIsosurfaceEnabled;
 uniform float uIsosurfaceValue;
 uniform vec3 uIsosurfaceColor;
 uniform float uIsosurfaceOpacity;
-
-// Vertical exaggeration
 uniform float uVerticalExaggeration;
 
-// Ray-box intersection
-vec2 intersectBox(vec3 origin, vec3 dir, vec3 boxMin, vec3 boxMax) {
-    vec3 invDir = 1.0 / dir;
-    vec3 t1 = (boxMin - origin) * invDir;
-    vec3 t2 = (boxMax - origin) * invDir;
-    vec3 tMin = min(t1, t2);
-    vec3 tMax = max(t1, t2);
-    float tNear = max(max(tMin.x, tMin.y), tMin.z);
-    float tFar = min(min(tMax.x, tMax.y), tMax.z);
-    return vec2(tNear, tFar);
+// Parallel rays must not divide by zero at a box face.
+vec2 intersectBox(vec3 origin, vec3 direction, vec3 lo, vec3 hi) {
+    vec3 safeDirection = mix(direction, vec3(1e-8), lessThan(abs(direction), vec3(1e-8)));
+    vec3 a = (lo - origin) / safeDirection;
+    vec3 b = (hi - origin) / safeDirection;
+    vec3 near = min(a, b);
+    vec3 far = max(a, b);
+    return vec2(max(max(near.x, near.y), near.z), min(min(far.x, far.y), far.z));
 }
 
-// Check if point is within slice bounds
-bool isWithinSlices(vec3 pos) {
-    // Normalize position to 0-1 range
-    vec3 normPos = (pos - uBoundsMin) / (uBoundsMax - uBoundsMin);
-    
-    if (uSliceXEnabled && (normPos.x < uSliceXMin || normPos.x > uSliceXMax)) {
-        return false;
-    }
-    if (uSliceYEnabled && (normPos.y < uSliceYMin || normPos.y > uSliceYMax)) {
-        return false;
-    }
-    if (uSliceZEnabled && (normPos.z < uSliceZMin || normPos.z > uSliceZMax)) {
-        return false;
-    }
-    
-    // Section cuts
-    if (uSectionNSEnabled && normPos.y > uSectionNSPosition) {
-        return false;
-    }
-    if (uSectionWEEnabled && normPos.x > uSectionWEPosition) {
-        return false;
-    }
-    
-    return true;
+float rawValue(vec3 pos) {
+    vec3 uv = (pos - uBoundsMin) / (uBoundsMax - uBoundsMin);
+    return texture(uVolumeData, clamp(uv, vec3(0.0), vec3(1.0))).r;
 }
 
-// Sample raw value from volume (for isosurface)
-float sampleVolumeValue(vec3 pos) {
-    vec3 texCoord = (pos - uBoundsMin) / (uBoundsMax - uBoundsMin);
-    texCoord = clamp(texCoord, 0.001, 0.999);
-    return texture(uVolumeData, texCoord).r;
+bool isNoData(float value) {
+    return isnan(value) || isinf(value) || (uHasNoData && abs(value - uNoDataValue) < 1e-6);
 }
 
-// Compute gradient for lighting (central differences)
-vec3 computeGradient(vec3 pos, float step) {
-    float dx = sampleVolumeValue(pos + vec3(step, 0.0, 0.0)) - sampleVolumeValue(pos - vec3(step, 0.0, 0.0));
-    float dy = sampleVolumeValue(pos + vec3(0.0, step, 0.0)) - sampleVolumeValue(pos - vec3(0.0, step, 0.0));
-    float dz = sampleVolumeValue(pos + vec3(0.0, 0.0, step)) - sampleVolumeValue(pos - vec3(0.0, 0.0, step));
-    return normalize(vec3(dx, dy, dz));
+float normalizedValue(float value) {
+    return clamp((value - uValueRange.x) / max(uValueRange.y - uValueRange.x, 1e-8), 0.0, 1.0);
 }
 
-// Sample the volume and apply transfer function
-vec4 sampleVolume(vec3 pos) {
-    // Convert world position to texture coordinates
-    vec3 texCoord = (pos - uBoundsMin) / (uBoundsMax - uBoundsMin);
-    
-    // Clamp to valid range
-    texCoord = clamp(texCoord, 0.001, 0.999);
-    
-    // Sample the 3D texture
-    float value = texture(uVolumeData, texCoord).r;
-    
-    if (uDiscreteMode) {
-        // Discrete mode: value is class index (0-255 mapped to 0-1)
-        int classIndex = int(value * 255.0 + 0.5);
-        if (classIndex >= uNumClasses) {
-            return vec4(0.0);
-        }
-        // Sample transfer function at class position
-        float u = (float(classIndex) + 0.5) / float(uNumClasses);
-        vec4 color = texture(uTransferFunction, vec2(u, 0.5));
-        return color;
-    } else {
-        // Continuous mode: interpolate transfer function
-        // value is already 0-1 from uint8 normalization
-        vec4 color = texture(uTransferFunction, vec2(value, 0.5));
-        return color;
-    }
+vec3 toLinear(vec3 color) {
+    return mix(color / 12.92, pow((color + 0.055) / 1.055, vec3(2.4)), step(vec3(0.04045), color));
+}
+
+vec3 toSRGB(vec3 color) {
+    return mix(color * 12.92, 1.055 * pow(max(color, vec3(0.0)), vec3(1.0 / 2.4)) - 0.055,
+        step(vec3(0.0031308), color));
+}
+
+vec3 faceNormal(vec3 pos, vec3 lo, vec3 hi) {
+    vec3 distance = min(abs(pos - lo), abs(pos - hi));
+    vec3 normal = vec3(0.0);
+    if (distance.x <= distance.y && distance.x <= distance.z) normal.x = pos.x < (lo.x + hi.x) * 0.5 ? -1.0 : 1.0;
+    else if (distance.y <= distance.z) normal.y = pos.y < (lo.y + hi.y) * 0.5 ? -1.0 : 1.0;
+    else normal.z = pos.z < (lo.z + hi.z) * 0.5 ? -1.0 : 1.0;
+    return normal;
+}
+
+float lighting(vec3 normal) {
+    return 0.65 + 0.35 * max(dot(normal, normalize(vec3(0.4, -0.6, 1.0))), 0.0);
+}
+
+vec3 gradient(vec3 pos) {
+    vec3 cell = (uBoundsMax - uBoundsMin) / uVolumeDimensions;
+    vec3 g = vec3(
+        rawValue(pos + vec3(cell.x, 0, 0)) - rawValue(pos - vec3(cell.x, 0, 0)),
+        rawValue(pos + vec3(0, cell.y, 0)) - rawValue(pos - vec3(0, cell.y, 0)),
+        rawValue(pos + vec3(0, 0, cell.z)) - rawValue(pos - vec3(0, 0, cell.z))
+    ) / (cell * vec3(1, 1, uVerticalExaggeration));
+    return dot(g, g) > 1e-12 ? normalize(g) : vec3(0, 0, 1);
 }
 
 void main() {
-    // Ray direction (normalized)
-    vec3 rayDir = normalize(vDirection);
-    
-    // Find intersection with volume bounding box
-    vec2 bounds = intersectBox(vOrigin, rayDir, uBoundsMin, uBoundsMax);
-    
-    if (bounds.x > bounds.y || bounds.y < 0.0) {
-        // Ray misses the volume
-        fragColor = vec4(0.0);
-        return;
-    }
-    
-    // Clamp to positive range
-    bounds.x = max(bounds.x, 0.0);
-    
-    // Ray marching parameters
-    float stepSize = (bounds.y - bounds.x) / float(uSteps);
-    vec3 rayStep = rayDir * stepSize;
-    
-    // Starting position
-    vec3 pos = vOrigin + rayDir * bounds.x;
-    
-    // Accumulated color
-    vec4 accumulatedColor = vec4(0.0);
-    
-    // For isosurface detection
-    float prevValue = -1.0;
-    bool isosurfaceHit = false;
-    
-    // Ray marching loop
+    vec3 span = uBoundsMax - uBoundsMin;
+    vec3 lo = uBoundsMin;
+    vec3 hi = uBoundsMax;
+    if (uSliceXEnabled) { lo.x += span.x * uSliceXMin; hi.x = uBoundsMin.x + span.x * uSliceXMax; }
+    if (uSliceYEnabled) { lo.y += span.y * uSliceYMin; hi.y = uBoundsMin.y + span.y * uSliceYMax; }
+    if (uSliceZEnabled) { lo.z += span.z * uSliceZMin; hi.z = uBoundsMin.z + span.z * uSliceZMax; }
+    // X = east, Y = north, Z = elevation. NS planes have constant X.
+    if (uSectionNSEnabled) hi.x = min(hi.x, uBoundsMin.x + span.x * uSectionNSPosition);
+    if (uSectionWEEnabled) hi.y = min(hi.y, uBoundsMin.y + span.y * uSectionWEPosition);
+    if (any(lessThanEqual(hi, lo))) discard;
+
+    vec3 direction = normalize(vDirection);
+    vec2 hit = intersectBox(vOrigin, direction, lo, hi);
+    hit.x = max(hit.x, 0.0);
+    if (hit.y <= hit.x) discard;
+
+    float stepSize = (hit.y - hit.x) / float(uSteps);
+    vec3 entry = vOrigin + direction * hit.x;
+    vec3 normal = faceNormal(entry, lo, hi);
+    // Continuous opacity uses distance measured in voxels, independent of step count.
+    float voxelStep = length(direction * stepSize / span * uVolumeDimensions);
+    vec4 accumulated = vec4(0.0);
+    float previous = -1.0;
+    float previousT = hit.x;
+
     for (int i = 0; i < uSteps; i++) {
-        // Check if within slice bounds
-        if (isWithinSlices(pos)) {
-            // Isosurface detection is optional. Avoid the extra 3D texture
-            // read during ordinary volume rendering.
-            if (uIsosurfaceEnabled && !uDiscreteMode) {
-                float currentValue = sampleVolumeValue(pos);
+        // Sample categorical cut faces immediately inside the boundary, avoiding stepped cuts.
+        float t = hit.x + (float(i) + (uDiscreteMode ? 0.0001 : 0.5)) * stepSize;
+        vec3 pos = vOrigin + direction * t;
+        float raw = rawValue(pos);
+        if (isNoData(raw)) { previous = -1.0; continue; }
+        float value = normalizedValue(raw);
 
-                if (!isosurfaceHit && prevValue >= 0.0) {
-                    // Check if we crossed the isosurface threshold
-                    float threshold = uIsosurfaceValue;
-                    if ((prevValue < threshold && currentValue >= threshold) ||
-                        (prevValue >= threshold && currentValue < threshold)) {
-                        // Found isosurface crossing - compute shading
-                        vec3 normal = computeGradient(pos, stepSize * 0.5);
-
-                        // Simple diffuse lighting
-                        vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-                        float diffuse = max(dot(normal, lightDir), 0.0);
-                        float ambient = 0.3;
-                        float lighting = ambient + (1.0 - ambient) * diffuse;
-
-                        vec4 isoColor = vec4(uIsosurfaceColor * lighting, uIsosurfaceOpacity);
-
-                        // Composite isosurface
-                        isoColor.rgb *= isoColor.a;
-                        accumulatedColor = accumulatedColor + isoColor * (1.0 - accumulatedColor.a);
-                        isosurfaceHit = true;
-                    }
-                }
-                prevValue = currentValue;
-            }
-
-            // Regular volume rendering (skip if only showing isosurface)
-            if (!uIsosurfaceEnabled || uDiscreteMode) {
-                // Sample volume at current position
-                vec4 sampleColor = sampleVolume(pos);
-                
-                // Apply alpha scaling
-                sampleColor.a *= uAlphaScale;
-                
-                // Front-to-back compositing
-                sampleColor.rgb *= sampleColor.a;
-                accumulatedColor = accumulatedColor + sampleColor * (1.0 - accumulatedColor.a);
-            }
-            
-            // Early termination if nearly opaque
-            if (accumulatedColor.a > 0.95) {
+        if (uIsosurfaceEnabled && !uDiscreteMode) {
+            if (previous >= 0.0 && (previous - uIsosurfaceValue) * (value - uIsosurfaceValue) <= 0.0
+                && abs(value - previous) > 1e-8) {
+                float fraction = clamp((uIsosurfaceValue - previous) / (value - previous), 0.0, 1.0);
+                vec3 surface = vOrigin + direction * mix(previousT, t, fraction);
+                vec3 n = gradient(surface);
+                if (dot(n, direction) > 0.0) n = -n;
+                accumulated = vec4(toLinear(uIsosurfaceColor) * lighting(n) * uIsosurfaceOpacity, uIsosurfaceOpacity);
                 break;
             }
+            previous = value;
+            previousT = t;
+            continue;
         }
-        
-        // Move to next position
-        pos += rayStep;
-        
-        // Check if we've exited the volume
-        if (pos.x < uBoundsMin.x || pos.x > uBoundsMax.x ||
-            pos.y < uBoundsMin.y || pos.y > uBoundsMax.y ||
-            pos.z < uBoundsMin.z || pos.z > uBoundsMax.z) {
-            break;
-        }
+
+        float classValue = uFloatData ? raw : raw * 255.0;
+        if (uDiscreteMode && (classValue < 0.0 || classValue > 255.0)) continue;
+        float coordinate = uDiscreteMode ? (floor(classValue + 0.5) + 0.5) / 256.0 : value;
+        vec4 color = texture(uTransferFunction, vec2(coordinate, 0.5));
+        float alpha = uDiscreteMode ? color.a : 1.0 - exp(-color.a * uDensity * voxelStep);
+        vec3 rgb = toLinear(color.rgb);
+        if (uDiscreteMode) rgb *= lighting(normal);
+        accumulated.rgb += (1.0 - accumulated.a) * rgb * alpha;
+        accumulated.a += (1.0 - accumulated.a) * alpha;
+        if (accumulated.a > 0.995) break;
     }
-    
-    // Apply brightness
-    accumulatedColor.rgb *= uBrightness;
-    
-    fragColor = accumulatedColor;
+    if (accumulated.a <= 0.0) discard;
+    // Convert straight linear color to display space, then premultiply for material blending.
+    fragColor = vec4(toSRGB(accumulated.rgb / accumulated.a) * accumulated.a, accumulated.a);
 }
 `;
 

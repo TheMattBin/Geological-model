@@ -4,6 +4,8 @@
 
 /** Metadata for the voxel volume */
 export interface VolumeMetadata {
+  description?: string;
+  synthetic?: boolean;
   dimensions: {
     x: number;
     y: number;
@@ -27,6 +29,9 @@ export interface VariableMetadata {
   unit?: string;
   numClasses?: number;
   range?: { min: number; max: number };
+  /** Range in the sampled texture, after uint8 normalization. */
+  encodingRange?: { min: number; max: number };
+  noDataValue?: number;
   colormap: ColorStop[] | DiscreteColor[];
 }
 
@@ -42,6 +47,7 @@ export interface DiscreteColor {
   label: string;
   color: [number, number, number, number]; // RGBA 0-255
   enabled?: boolean;
+  role?: 'fault';
 }
 
 /** Slice configuration for cross-section views */
@@ -65,8 +71,6 @@ export type RenderMode = 'volume' | 'surfaces';
 export interface VolumeRendererOptions {
   /** Container element for the Three.js canvas */
   container: HTMLElement;
-  /** Volume metadata */
-  metadata: VolumeMetadata;
   /** Initial render mode */
   renderMode?: RenderMode;
   /** Initial vertical exaggeration */

@@ -1,19 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {
-  getNormalizedVolumeSize,
-  getCameraDistance,
-  validateVolumeMetadata,
-} from '../src/three/volumeGeometry.mjs';
+import { getNormalizedVolumeSize, getCameraDistance, validateVolumeMetadata } from '../src/three/volumeGeometry.mjs';
 
 const sampleMetadata = {
   dimensions: { x: 64, y: 64, z: 32 },
   bounds: {
     x: { min: 0, max: 1000 },
     y: { min: 0, max: 1000 },
-    z: { min: -500, max: 0 },
+    z: { min: -500, max: 0 }
   },
-  variables: [],
+  variables: []
 };
 
 test('normalizes the sample volume to its physical aspect ratio', () => {
@@ -32,10 +28,15 @@ test('camera distance grows with the displayed volume height', () => {
   assert.ok(exaggeratedDistance > normalDistance);
 });
 
+test('portrait camera framing accounts for horizontal field of view', () => {
+  const size = getNormalizedVolumeSize(sampleMetadata);
+  assert.ok(getCameraDistance(size, 45, 1.35, 0.5) > getCameraDistance(size, 45, 1.35, 1));
+});
+
 test('reports missing or invalid coordinate bounds', () => {
   const warnings = validateVolumeMetadata({
     ...sampleMetadata,
-    bounds: { x: sampleMetadata.bounds.x, y: { min: 1, max: 1 } },
+    bounds: { x: sampleMetadata.bounds.x, y: { min: 1, max: 1 } }
   });
 
   assert.deepEqual(warnings, ['Axis y has a non-positive span', 'Axis z is missing bounds']);

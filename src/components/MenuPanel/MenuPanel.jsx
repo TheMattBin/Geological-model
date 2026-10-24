@@ -7,15 +7,8 @@ import PropTypes from 'prop-types';
 /**
  * MenuPanel component
  */
-const MenuPanel = ({ legendInfo, setLegendInfo }) => {
-  const {
-    enableGrid,
-    setEnableGrid,
-    displayLegend,
-    setDisplayLegend,
-    displayFault,
-    setDisplayFault
-  } = useUIContext();
+const MenuPanel = ({ metadata, legendInfo, setLegendInfo }) => {
+  const { enableGrid, setEnableGrid, displayLegend, setDisplayLegend, displayFault, setDisplayFault } = useUIContext();
 
   return (
     <Background title='' size='small'>
@@ -23,7 +16,7 @@ const MenuPanel = ({ legendInfo, setLegendInfo }) => {
         <label className={`${styles.label} ${styles.switchLabel}`}>
           <span>Display legend</span>
           <input
-            type="checkbox"
+            type='checkbox'
             className={styles.toggleSwitch}
             checked={displayLegend}
             onChange={(e) => setDisplayLegend(e.target.checked)}
@@ -35,38 +28,38 @@ const MenuPanel = ({ legendInfo, setLegendInfo }) => {
         <label className={`${styles.label} ${styles.switchLabel}`}>
           <span>Display grid</span>
           <input
-            type="checkbox"
+            type='checkbox'
             className={styles.toggleSwitch}
             checked={enableGrid}
             onChange={(e) => setEnableGrid(e.target.checked)}
           />
         </label>
       </div>
-      <div className={styles.layerVisibility}>
-        <label className={`${styles.label} ${styles.switchLabel}`}>
-          <span>Display fault</span>
-          <input
-            type="checkbox"
-            className={styles.toggleSwitch}
-            checked={displayFault}
-            onChange={(e) => setDisplayFault(e.target.checked)}
-          />
-        </label>
-      </div>
+      {legendInfo?.uniqueValues?.some((entry) => entry.role === 'fault') && (
+        <div className={styles.layerVisibility}>
+          <label className={`${styles.label} ${styles.switchLabel}`}>
+            <span>Display fault</span>
+            <input
+              type='checkbox'
+              className={styles.toggleSwitch}
+              checked={displayFault}
+              onChange={(e) => setDisplayFault(e.target.checked)}
+            />
+          </label>
+        </div>
+      )}
       <div className='separator'></div>
       <div className={styles.overviewMap}>
-        <div>Geological model displaying soil lithology in Hong Kong.</div>
-        <div>
-          <img src='./assets/hk-overview.png' alt="Hong Kong overview" />
-        </div>
+        <div>{metadata?.description ?? 'Loading dataset…'}</div>
       </div>
     </Background>
   );
 };
 
 MenuPanel.propTypes = {
+  metadata: PropTypes.object,
   legendInfo: PropTypes.any,
-  setLegendInfo: PropTypes.func,
+  setLegendInfo: PropTypes.func
 };
 
 export default MenuPanel;

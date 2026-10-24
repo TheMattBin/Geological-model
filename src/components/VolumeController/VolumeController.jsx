@@ -1,166 +1,82 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect } from 'react';
 import PropTypes from 'prop-types';
+import { useUIContext } from '../../UIContext.jsx';
 
-/**
- * VolumeController - Controls for the Three.js volume renderer
- * 
- * Replaces the ArcGIS VoxelLayer component. Manages:
- * - Variable switching
- * - Vertical exaggeration
- * - Slicing and sections
- * - Isosurface display
- * - Legend data extraction
- */
+/** Synchronize UI state with the renderer after its dataset is ready. */
 const VolumeController = ({
   volumeRenderer,
   metadata,
   selectedVariable,
   exaggeration,
   sections,
-  setSections,
   displaySections,
-  dimensions,
-  setDimensions,
   legendInfo,
   setLegendInfo,
+  isosurface,
+  isovalue
 }) => {
-  const [loaded, setLoaded] = useState(false);
+  const { enableGrid, displayFault } = useUIContext();
+  const ready = volumeRenderer && metadata && selectedVariable;
 
-  // Initialize when renderer and metadata are available
   useEffect(() => {
-    if (volumeRenderer && metadata) {
-      setLoaded(true);
-      
-      // Set dimensions from metadata
-      const dims = metadata.dimensions;
-      setDimensions([dims.x, dims.y, dims.z]);
-      
-      // Initialize legend info from first variable
-      updateLegendInfo(selectedVariable.id);
-    }
-  }, [volumeRenderer, metadata]);
-
-  // Update legend info for the selected variable
-  const updateLegendInfo = useCallback((variableId) => {
-    if (!metadata) return;
-    
-    const variable = metadata.variables.find(v => v.id === variableId);
+    if (!ready) return;
+    const variable = metadata.variables.find((item) => item.id === selectedVariable.id);
     if (!variable) return;
-    
-    const legendData = {
-      id: variable.id,
-      label: variable.name,
-      continuous: variable.type === 'continuous',
-    };
-    
-    if (variable.type === 'continuous') {
-      legendData.range = variable.range 
-        ? [variable.range.min, variable.range.max] 
-        : [0, 1];
-      legendData.colorStops = variable.colormap;
-    } else {
-      legendData.uniqueValues = variable.colormap.map(c => ({
-        label: c.label,
-        value: c.value,
-        color: { r: c.color[0], g: c.color[1], b: c.color[2], a: c.color[3] },
-        enabled: c.enabled !== false,
-      }));
-    }
-    
-    setLegendInfo(legendData);
-  }, [metadata, setLegendInfo]);
-
-  // Handle variable change
-  useEffect(() => {
-    if (loaded && volumeRenderer && selectedVariable) {
-      volumeRenderer.setActiveVariable(selectedVariable.id);
-      
-      // Update legend
-      updateLegendInfo(selectedVariable.id);
-    }
-  }, [loaded, volumeRenderer, selectedVariable, metadata]);
-
-  // Handle vertical exaggeration change
-  useEffect(() => {
-    if (loaded && volumeRenderer && exaggeration) {
-      volumeRenderer.setVerticalExaggeration(exaggeration);
-    }
-  }, [loaded, volumeRenderer, exaggeration]);
-
-  // Handle sections
-  useEffect(() => {
-    if (loaded && volumeRenderer && dimensions && dimensions.length > 0) {
-      if (displaySections && sections && sections.length > 0) {
-        console.log('VolumeController: Updating sections', sections);
-        
-        // Find enabled sections
-        const enabledSections = sections.filter(s => s.enabled);
-        let hasNS = false, hasWE = false;
-        let nsPosition = 1, wePosition = 1;
-        
-        enabledSections.forEach((section) => {
-          const label = section.label || '';
-          if (label.startsWith('ns')) {
-            hasNS = true;
-            nsPosition = section.point ? section.point[0] / dimensions[0] : 1;
-          } else if (label.startsWith('we')) {
-            hasWE = true;
-            wePosition = section.point ? section.point[1] / dimensions[1] : 1;
+    volumeRenderer.setActiveVariable(variable.id);
+    setLegendInfo(
+      variable.type === 'continuous'
+        ? {
+            id: variable.id,
+            label: variable.name,
+            continuous: true,
+            range: [variable.range?.min ?? 0, variable.range?.max ?? 1],
+            unit: variable.unit,
+            colorStops: variable.colormap
           }
-        });
-        
-        console.log('VolumeController: NS section:', hasNS, nsPosition, 'WE section:', hasWE, wePosition);
-        volumeRenderer.setSection('NS', hasNS, nsPosition);
-        volumeRenderer.setSection('WE', hasWE, wePosition);
-      } else {
-        // Disable all sections
-        console.log('VolumeController: Disabling all sections');
-        volumeRenderer.setSection('NS', false, 1);
-        volumeRenderer.setSection('WE', false, 1);
-      }
-    }
-  }, [loaded, volumeRenderer, sections, displaySections, dimensions]);
+        : {
+            id: variable.id,
+            label: variable.name,
+            continuous: false,
+            uniqueValues: variable.colormap.map((entry) => ({
+              ...entry,
+              color: { r: entry.color[0], g: entry.color[1], b: entry.color[2], a: entry.color[3] },
+              enabled: entry.enabled !== false
+            }))
+          }
+    );
+  }, [volumeRenderer, metadata, selectedVariable, setLegendInfo, ready]);
 
-  // Handle legend info changes (e.g., toggling class visibility)
   useEffect(() => {
-    if (volumeRenderer && legendInfo && !legendInfo.continuous) {
-      const colormap = legendInfo.uniqueValues.map(uv => ({
-        value: uv.value,
-        label: uv.label,
-        color: [uv.color.r, uv.color.g, uv.color.b, uv.color.a],
-        enabled: uv.enabled,
-      }));
-      volumeRenderer.updateColormap(legendInfo.id, colormap);
-    }
-  }, [volumeRenderer, legendInfo]);
+    if (ready) volumeRenderer.setVerticalExaggeration(exaggeration);
+  }, [volumeRenderer, ready, exaggeration]);
 
-  // Initialize sections based on dimensions
   useEffect(() => {
-    if (loaded && dimensions && dimensions.length > 0) {
-      const newSections = [];
-      for (let i = 1; i < dimensions[1]; i++) {
-        newSections.push({ 
-          enabled: false, 
-          label: `we${i}`, 
-          orientation: 180, 
-          tilt: 90, 
-          point: [0, i, 0] 
-        });
-      }
-      for (let i = 1; i < dimensions[0]; i++) {
-        newSections.push({ 
-          enabled: false, 
-          label: `ns${i}`, 
-          orientation: 90, 
-          tilt: 90, 
-          point: [i, 0, 0] 
-        });
-      }
-      setSections(newSections);
-    }
-  }, [loaded, dimensions, setSections]);
+    if (!ready) return;
+    volumeRenderer.setSection('NS', displaySections, sections.NS);
+    volumeRenderer.setSection('WE', displaySections, sections.WE);
+  }, [volumeRenderer, ready, sections, displaySections]);
 
-  // This component doesn't render anything - it just manages state
+  useEffect(() => {
+    if (ready) volumeRenderer.setGridVisible(enableGrid);
+  }, [volumeRenderer, ready, enableGrid]);
+
+  useEffect(() => {
+    if (!ready) return;
+    volumeRenderer.setIsosurface(isosurface && selectedVariable.type === 'continuous', isovalue);
+  }, [volumeRenderer, ready, selectedVariable, isosurface, isovalue]);
+
+  useEffect(() => {
+    if (!ready || !legendInfo || legendInfo.continuous || legendInfo.id !== selectedVariable.id) return;
+    volumeRenderer.updateColormap(
+      legendInfo.id,
+      legendInfo.uniqueValues.map((entry) => ({
+        ...entry,
+        color: [entry.color.r, entry.color.g, entry.color.b, entry.color.a],
+        enabled: entry.enabled && (entry.role !== 'fault' || displayFault)
+      }))
+    );
+  }, [volumeRenderer, ready, selectedVariable, legendInfo, displayFault]);
+
   return null;
 };
 
@@ -169,13 +85,12 @@ VolumeController.propTypes = {
   metadata: PropTypes.object,
   selectedVariable: PropTypes.object,
   exaggeration: PropTypes.number,
-  sections: PropTypes.array,
-  setSections: PropTypes.func,
+  sections: PropTypes.object,
   displaySections: PropTypes.bool,
-  dimensions: PropTypes.array,
-  setDimensions: PropTypes.func,
   legendInfo: PropTypes.object,
   setLegendInfo: PropTypes.func,
+  isosurface: PropTypes.bool,
+  isovalue: PropTypes.number
 };
 
 export default VolumeController;

@@ -7,7 +7,10 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test tests/*.test.mjs",
-    "convert-sample": "python scripts/convert_netcdf.py --sample --output-dir ./public/data"
+    "convert-sample": "python scripts/convert_netcdf.py --sample --output-dir ./public/data",
+    "typecheck": "tsc --noEmit",
+    "test:browser": "playwright test",
+    "test:data": "python -m unittest discover -s tests -p 'test_*.py'"
   },
   "repository": {
     "type": "git",
@@ -29,9 +32,10 @@
   },
   "homepage": "https://github.com/TheMattBin/Geological-model-hk#readme",
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/react": "^18.2.0",
     "@types/react-dom": "^18.2.0",
-    "@types/three": "^0.160.0",
+    "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^6.0.2",
     "typescript": "^5.3.0",
     "vite": "^8.3.5"
@@ -41,5 +45,9 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "three": "^0.185.1"
+  },
+  "type": "module",
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   }
 }

@@ -1,20 +1,22 @@
 {
+  "synthetic": true,
+  "description": "Synthetic folded strata with an inclined fault and displaced layers. Drag to orbit; scroll to zoom.",
   "dimensions": {
     "x": 64,
-    "y": 64,
-    "z": 32
+    "y": 48,
+    "z": 40
   },
   "bounds": {
     "x": {
       "min": 0,
-      "max": 1000
+      "max": 1200
     },
     "y": {
       "min": 0,
-      "max": 1000
+      "max": 900
     },
     "z": {
-      "min": -500,
+      "min": -600,
       "max": 0
     }
   },
@@ -70,10 +72,11 @@
         {
           "value": 4,
           "label": "Fault",
+          "role": "fault",
           "color": [
-            255,
-            0,
-            0,
+            203,
+            75,
+            61,
             255
           ]
         }
@@ -85,7 +88,7 @@
       "file": "permeability.raw",
       "dtype": "uint8",
       "type": "continuous",
-      "unit": "md",
+      "unit": "relative",
       "range": {
         "min": 0,
         "max": 1
@@ -94,45 +97,45 @@
         {
           "position": 0.0,
           "color": [
-            0,
-            0,
-            128,
+            68,
+            1,
+            84,
             255
           ]
         },
         {
           "position": 0.25,
           "color": [
-            0,
-            128,
-            255,
+            59,
+            82,
+            139,
             255
           ]
         },
         {
           "position": 0.5,
           "color": [
-            0,
-            255,
-            128,
+            33,
+            145,
+            140,
             255
           ]
         },
         {
           "position": 0.75,
           "color": [
-            255,
-            255,
-            0,
+            94,
+            201,
+            98,
             255
           ]
         },
         {
           "position": 1.0,
           "color": [
-            255,
-            0,
-            0,
+            253,
+            231,
+            37,
             255
           ]
         }

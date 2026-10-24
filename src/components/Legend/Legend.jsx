@@ -39,7 +39,7 @@ const colorToHex = (color) => {
  */
 const createGradient = (colors) => {
   if (!colors || colors.length === 0) return 'linear-gradient(90deg, #333, #fff)';
-  
+
   const gradientColors = colors.map((c) => {
     const hex = colorToHex(c.color);
     const position = (c.position ?? 0) * 100;
@@ -86,12 +86,12 @@ Chip.propTypes = {
   enabled: PropTypes.bool,
   onClick: PropTypes.func,
   value: PropTypes.any,
-  label: PropTypes.string,
+  label: PropTypes.string
 };
 
 const ContinuousLegend = ({ colors }) => {
   const divRef = useRef(null);
-  
+
   useEffect(() => {
     if (divRef.current && colors && colors.length > 0) {
       divRef.current.style.background = createGradient(colors);
@@ -107,21 +107,21 @@ const ContinuousLegend = ({ colors }) => {
 };
 
 ContinuousLegend.propTypes = {
-  colors: PropTypes.array.isRequired,
+  colors: PropTypes.array.isRequired
 };
 
 const DiscreteLegend = ({ uniqueValues, uniqueValuesChanged }) => {
   const toggleVisibility = (event) => {
-    const value = parseInt(event.target.getAttribute('datavalue'));
+    const value = Number(event.currentTarget.getAttribute('datavalue'));
     const newUniqueValues = uniqueValues.map((uv) => {
       if (uv.value === value) {
-        uv.enabled = !uv.enabled;
+        return { ...uv, enabled: !uv.enabled };
       }
       return uv;
     });
     uniqueValuesChanged(newUniqueValues);
   };
-  
+
   return uniqueValues.map((uv, index) => (
     <Chip
       enabled={uv.enabled}
@@ -136,7 +136,7 @@ const DiscreteLegend = ({ uniqueValues, uniqueValuesChanged }) => {
 
 DiscreteLegend.propTypes = {
   uniqueValues: PropTypes.array.isRequired,
-  uniqueValuesChanged: PropTypes.func.isRequired,
+  uniqueValuesChanged: PropTypes.func.isRequired
 };
 
 /**
@@ -151,8 +151,10 @@ const Legend = ({ legendInfo, setLegendInfo }) => {
           {legendInfo.continuous ? (
             <div>
               <div className={styles.labels}>
-                <div>&gt;{Array.isArray(legendInfo.range) ? legendInfo.range[0].toFixed(2) : '0.00'}</div>
-                <div>&lt;{Array.isArray(legendInfo.range) ? legendInfo.range[1].toFixed(2) : '1.00'}</div>
+                <div>{legendInfo.range[0].toPrecision(3)}</div>
+                <div>
+                  {legendInfo.range[1].toPrecision(3)} {legendInfo.unit}
+                </div>
               </div>
               <ContinuousLegend colors={legendInfo.colorStops} />
             </div>
@@ -181,7 +183,7 @@ const Legend = ({ legendInfo, setLegendInfo }) => {
 
 Legend.propTypes = {
   legendInfo: PropTypes.object,
-  setLegendInfo: PropTypes.func,
+  setLegendInfo: PropTypes.func
 };
 
 export default React.memo(Legend);

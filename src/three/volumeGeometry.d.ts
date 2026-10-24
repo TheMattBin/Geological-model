@@ -7,5 +7,10 @@ export interface NormalizedVolumeSize {
 }
 
 export function getNormalizedVolumeSize(metadata: VolumeMetadata, verticalExaggeration?: number): NormalizedVolumeSize;
-export function getCameraDistance(size: NormalizedVolumeSize, fieldOfView?: number, margin?: number): number;
+export function getCameraDistance(
+  size: NormalizedVolumeSize,
+  fieldOfView?: number,
+  margin?: number,
+  aspect?: number
+): number;
 export function validateVolumeMetadata(metadata: VolumeMetadata): string[];

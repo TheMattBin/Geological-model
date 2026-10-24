@@ -1,238 +1,91 @@
-# HK Geological Model
+# Geological Volume Explorer
 
-![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
-![Node Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)
-![React Version](https://img.shields.io/badge/React-18.2.0-blue)
-![Three.js](https://img.shields.io/badge/Three.js-0.160-orange)
+An interactive React + Three.js WebGL2 viewer for voxel geology. The bundled **synthetic** example contains undulating strata, an inclined fault with displaced layers, and correlated relative permeability. It is not a surveyed Hong Kong dataset.
 
-A sophisticated 3D web application showcasing Hong Kong's geological model using WebGL volume rendering. Built with React, Three.js, and modern web technologies.
+Features include categorical lithology, continuous volume rendering, class/fault visibility, a ground grid, two section cuts, vertical exaggeration, and continuous-variable isosurfaces. Drag to orbit, right-drag to pan, and scroll to zoom.
 
-## 🎯 Features
+## Development
 
-- **3D Geological Visualization**: Interactive 3D volume rendering of geological layers
-- **Multiple Variables**: Support for lithology (discrete) and permeability (continuous) data
-- **Advanced Rendering Modes**: Volume rendering, isosurfaces, and cross-sections
-- **Interactive Controls**: Real-time manipulation of visualization parameters
-- **Responsive Design**: Optimized for desktop viewing
-- **No External Dependencies**: Pure WebGL rendering via Three.js (no ArcGIS required)
-
-## 🛠️ Technology Stack
-
-- **Frontend**: React 18.2.0 with Vite 6.x
-- **3D Visualization**: Three.js 0.185.1 with WebGL2
-- **Volume Rendering**: Custom GLSL ray marching shaders
-- **State Management**: React Context API
-- **Styling**: CSS Modules with custom themes
-- **Deployment**: GitHub Pages, Docker support
-
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Node.js >= 18.0.0
-- npm >= 8.0.0
-- Python 3.x (for data conversion, optional)
-
-### Installation
-
-1. **Clone the repository**
+Use Node 22 (`nvm use`), then:
 
 ```bash
-git clone https://github.com/TheMattBin/Geological-model-hk.git
-cd Geological-model-hk
-```
-
-2. **Install dependencies**
-
-```bash
-npm install
-```
-
-3. **Start development server**
-
-```bash
+npm ci
 npm run dev
 ```
 
-4. **Open your browser**
-
-Navigate to [http://localhost:3000](http://localhost:3000)
-
-## 📦 Available Scripts
-
-| Script | Description |
-|--------|-------------|
-| `npm install` | Install all dependencies |
-| `npm run dev` | Start development server on localhost:3000 |
-| `npm run build` | Build for production (creates `/dist` folder) |
-| `npm run preview` | Preview production build locally |
-| `npm test` | Run renderer quality policy tests |
-| `npm run convert-sample` | Generate sample voxel data |
-
-## 📊 Data Format
-
-The application uses a custom binary voxel format:
-
-### Directory Structure
-```
-public/data/
-├── metadata.json      # Volume dimensions, variables, colormaps
-├── lithology.raw      # Uint8 binary voxel data
-└── permeability.raw   # Uint8 binary voxel data
-```
-
-### Converting Your Own Data
-
-Use the included Python script to convert NetCDF data:
+Open http://localhost:3000. A WebGL2-capable browser is required.
 
 ```bash
-# Generate sample data  
+npm test               # Geometry and adaptive quality policy
+npm run typecheck      # TypeScript renderer checks
+npm run build          # Production bundle in dist/
+npx playwright install chromium
+npm run test:browser   # Actual WebGL rendering and UI regressions
+npm run preview       # Serve the production build
+```
+
+Browser tests run with software WebGL for portability and save screenshots under `test-results/`. They do not measure hardware GPU performance. The development overlay reports animation-frame cadence while rendering is active.
+
+## Sample and custom data
+
+Create a Python environment for data tools:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r scripts/requirements.txt
+npm run test:data
+```
+
+Regenerate the bundled deterministic example (this overwrites `public/data/`):
+
+```bash
 npm run convert-sample
-
-# Convert your own NetCDF file
-python scripts/convert_netcdf.py your_data.nc --output-dir ./public/data
 ```
 
-### metadata.json Format
-```json
-{
-  "dimensions": { "x": 64, "y": 64, "z": 32 },
-  "bounds": {
-    "x": { "min": 0, "max": 64 },
-    "y": { "min": 0, "max": 64 },
-    "z": { "min": 0, "max": 32 }
-  },
-  "variables": [
-    {
-      "id": 0,
-      "name": "Lithology",
-      "type": "discrete",
-      "file": "lithology.raw",
-      "colormap": [...]
-    }
-  ]
-}
-```
-
-## 🐳 Docker Deployment
-
-### Build and Run Locally
+Convert your own dataset into a separate directory:
 
 ```bash
-# Build the Docker image
+python scripts/convert_netcdf.py input.nc --output-dir public/custom-data
+```
+
+Set `dataPath` in `src/config.js` to `./custom-data`. The variable controls and legends come from that dataset's `metadata.json`; no variable list needs to be maintained in application code.
+
+The converter recognizes `lithology`/`lith`/`rock_type`/`class` and `permeability`/`perm`/`k`/`conductivity`. Use `--lithology-var NAME` or `--permeability-var NAME` for other names. A continuous-only dataset is supported. Imported class labels retain source codes; edit their labels/colors in metadata to supply the geological interpretation.
+
+Input requirements:
+
+- Each variable must be a single 3D array on the same regular grid. Select time/member dimensions and resample irregular data before conversion.
+- Dimensions must identify projected X (`x`, `easting`), Y (`y`, `northing`), and Z (`z`, `elevation`, `depth`). Their order may vary; conversion transposes to Z/Y/X.
+- Coordinates use metres or kilometres (metres are assumed when units are absent). Geographic longitude/latitude requires projection before conversion.
+- Descending coordinates are reversed together with the data. Positive-down depth becomes increasing elevation. Coordinate centers are converted to cell-edge bounds.
+- Masked/nonfinite voxels remain missing. Converted uint8 data reserves 255 for missing values; continuous data is quantized to 0–254. Original physical ranges are retained for legends and isosurface thresholds.
+
+## Binary/metadata contract
+
+A dataset contains `metadata.json` plus one raw file per variable. Raw arrays are contiguous Z/Y/X (X varies fastest). Byte length must exactly match the dimensions and dtype. Supported dtypes are `uint8` and `float32`; float32 continuous values require a physical `range`.
+
+Metadata defines:
+
+- `dimensions`: voxel counts `{x, y, z}`.
+- `bounds`: cell-edge `{min, max}` for each axis, in a common physical unit.
+- `synthetic` and `description`: dataset disclosure and descriptive text.
+- `variables`: unique IDs, names, files, dtype, `discrete`/`continuous` type, optional units and range, and colormap.
+- Discrete colormap entries: `value`, `label`, RGBA `color`, optional `enabled`, and optional `role: "fault"`. Values need not be consecutive.
+- Continuous colormap entries: normalized `position` and RGBA `color`.
+- Optional `noDataValue`: missing-value sentinel in raw units. Optional `encodingRange`: the valid interval after uint8 texture normalization; converted continuous data uses `[0, 254/255]`.
+
+Missing-value textures use nearest sampling to prevent sentinel values blending into valid measurements. All display colors use sRGB. Categorical values remain categorical; continuous opacity is corrected for sample spacing. The renderer uses Z-up, with N–S cuts at constant X and W–E cuts at constant Y.
+
+## Structure and deployment
+
+`src/App/` owns shared application state, `src/components/` contains controls and the scene wrapper, and `src/three/` contains renderer, shaders, loader, and types. Static datasets live under `public/data/`; the converter is `scripts/convert_netcdf.py`.
+
+Deploy `dist/` to static hosting after `npm run build`, or build the supplied Dockerfile:
+
+```bash
 docker build -t geological-model .
-
-# Run the container
-docker run --name geological-model -p 80:80 -d geological-model
+docker run --rm -p 8080:80 geological-model
 ```
 
-### Access the Application
-
-Open [http://localhost](http://localhost) in your browser.
-
-### Docker Hub (Optional)
-
-To enable automated Docker Hub publishing:
-1. Create secrets in your repository: `DOCKER_USERNAME` and `DOCKER_PASSWORD`
-2. Push a version tag (e.g., `v1.0.0`) to trigger the Docker workflow
-
-## 🚀 Deployment Options
-
-### GitHub Pages (Recommended)
-
-The application is automatically deployed to GitHub Pages via GitHub Actions.
-
-**Setup required:**
-1. Go to Repository Settings → Pages
-2. Under "Build and deployment", set Source to **GitHub Actions**
-3. Push to the `main` branch to trigger deployment
-
-### Manual Deployment
-
-```bash
-# Build the application
-npm run build
-
-# The built files are in the /dist directory
-# Deploy these files to your web server
-```
-
-## 🗂️ Project Structure
-
-```
-/
-├── src/
-│   ├── App/                    # Main application component
-│   ├── three/                  # Three.js volume rendering
-│   │   ├── VolumeRenderer.ts  # Main renderer class
-│   │   ├── shaders.ts         # GLSL ray marching shaders
-│   │   ├── dataLoader.ts      # Binary data loading
-│   │   └── types.ts           # TypeScript definitions
-│   ├── components/             # React UI components
-│   │   ├── Scene3D/           # Three.js scene wrapper
-│   │   ├── MenuPanel/         # Left sidebar controls
-│   │   ├── VisualizationPanel/ # Right panel settings
-│   │   ├── VolumeController/  # Renderer state bridge
-│   │   └── ...                # Other components
-│   ├── config.js              # Application configuration
-│   ├── UIContext.jsx          # Global state management
-│   └── main.jsx               # React entry point
-├── public/data/               # Voxel data files
-├── scripts/                   # Data conversion scripts
-├── .github/workflows/         # CI/CD pipelines
-├── Dockerfile                 # Docker configuration
-└── README.md                  # This file
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
-
-### Development Workflow
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
-
-## 📋 Using Your Own Data
-
-To visualize your own geological model:
-
-1. **Prepare your data** as a NetCDF file or create raw binary voxel files
-2. **Convert to binary format** using the provided conversion script
-3. **Update metadata.json** with your dimensions, bounds, and colormap
-4. **Configure variables** in `src/config.js`
-
-## 🎨 Customization
-
-### Styling
-
-The application uses CSS Modules for component-scoped styling. Customize:
-
-- `src/main.css` - Global styles and theme variables
-- `src/components/*/ComponentName.module.css` - Component-specific styles
-
-### Configuration
-
-- `src/config.js` - Variable definitions and display options
-- `vite.config.js` - Build configuration
-
-### Shaders
-
-- `src/three/shaders.ts` - GLSL ray marching and transfer function logic
-
-## 🔒 Security
-
-- Regular security audits via `npm audit`
-- Automated dependency updates
-- No hardcoded secrets or API keys
-- Content Security Policy compliant
-
-## 📊 Performance
-
-- WebGL2 3D textures for efficient volume sampling
-- Front-to-back ray marching with early termination
-- React.memo optimizations for component rendering
-- Optimized bundle size with Vite
+CI runs unit tests, type checking, conversion tests, browser rendering checks, dependency audit, and a production build on Node 22. Development conventions are in [AGENTS.md](AGENTS.md).
