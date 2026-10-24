@@ -33,7 +33,7 @@
   "homepage": "https://github.com/TheMattBin/Geological-model#readme",
   "devDependencies": {
     "@playwright/test": "^1.64.1",
-    "@types/react": "^18.2.0",
+    "@types/react": "^19.3.0",
     "@types/react-dom": "^18.2.0",
     "@types/three": "^0.185.4",
     "@vitejs/plugin-react": "^6.0.2",
@@ -42,7 +42,7 @@
   },
   "dependencies": {
     "prop-types": "^15.8.1",
-    "react": "^18.2.0",
+    "react": "^19.3.1",
     "react-dom": "^18.2.0",
     "three": "^0.185.1"
   },
