@@ -112,4 +112,36 @@ docker build -t geological-model .
 docker run --rm -p 8080:80 geological-model
 ```
 
-CI runs unit tests, type checking, conversion tests, browser rendering checks, dependency audit, and a production build on Node 22. The scheduled dependency-update workflow runs the same checks before creating its PR; Dependabot targets `main`. Dependency audits never automatically rewrite dependency versions during validation. Development conventions are in [AGENTS.md](AGENTS.md).
+The `CI` workflow runs on pull requests and pushes to `main`. Application checks, Python conversion tests, and development renderer tests run in parallel. The application job builds once; production smoke and visual tests download that artifact and serve it under `/Geological-model/` to catch project-path asset failures. The `CI passed` job succeeds only when every validation job succeeds. Superseded PR runs are cancelled; main runs do not cancel an active deployment.
+
+After successful validation on `main`, GitHub Pages receives the same build artifact. A final smoke test checks the deployed commit through `revision.json`, both dataset variables, saved-view restoration, and PNG export. A failed deployment check is visible as a failed workflow; it does not automatically roll back the site. To roll back, revert the offending commit and let CI validate and deploy the revert.
+
+Repository setup is required once:
+
+- In **Settings → Pages**, choose **GitHub Actions** as the build source.
+- Configure the `github-pages` environment to allow deployments only from `main`.
+- In the `main` branch ruleset, require the **CI passed** status check. Remove requirements for the retired `Build React App`, `Code Quality`, and `Bundle Analysis` checks if configured. Required checks apply to PR merges; restricting direct pushes requires a corresponding branch rule.
+
+These settings live on GitHub and are not applied by editing workflow files. PRs validate the build but cannot deploy. Validation jobs have read-only repository permissions; only the deployment job receives Pages and OIDC write permissions. Actions use full commit pins. Weekly grouped Dependabot updates cover npm, Python, and GitHub Actions; the overlapping scheduled updater has been removed. Dependency audits never automatically rewrite dependency versions during validation.
+
+To reproduce the production checks locally, use the Node version in `.nvmrc`:
+
+```bash
+npm ci
+npm test
+npm run typecheck
+npm run build
+npm run check:bundle
+npx playwright install chromium
+npm run test:browser
+npm run test:production
+npm run test:visual
+```
+
+The bundle gate sums gzip level-9 sizes of all JavaScript and CSS assets, including lazy chunks. Budgets in `bundle-budget.json` are 240 KiB JavaScript and 4 KiB CSS; the initial measured build is approximately 217 KiB and 2.6 KiB respectively. Budget increases should be intentional and explained in review. Results go to the Actions job summary, so fork PRs need no comment-write permission.
+
+Visual baselines in `tests/visual/baselines/` cover lithology, section cuts, permeability, and the mobile model. They use Chromium from the lockfile, SwiftShader, fixed viewports, and device scale 1. The model comparisons hide UI overlays and disable axis labels to avoid Linux font differences; mobile controls are checked separately for visibility and interaction. Generate baselines on Linux with `npm run test:visual -- --update-snapshots`, inspect every changed image, and commit intentional changes. CI never regenerates baselines. Browser upgrades may require reviewed baseline updates; software WebGL checks correctness, not hardware performance.
+
+Browser failures retain screenshots and traces in `test-results/`; HTML reports are in `playwright-report/`. CI uploads these for seven days, including visual diffs. Open a trace with `npx playwright show-trace <trace.zip>`. To smoke-test an existing deployment, set `PLAYWRIGHT_BASE_URL=https://your-host/project/` when running `npm run test:production`; optionally set `EXPECTED_REVISION` to require an exact commit. The revision check is skipped locally unless that variable is set.
+
+Development conventions are in [AGENTS.md](AGENTS.md).

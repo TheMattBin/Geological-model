@@ -4,21 +4,19 @@ on:
   issues:
     types: [opened]
 
+permissions: {}
+
 jobs:
   summary:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       issues: write
       models: read
-      contents: read
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
       - name: Run AI inference
         id: inference
-        uses: actions/ai-inference@v1
+        uses: actions/ai-inference@b81b2afb8390ee6839b494a404766bef6493c7d9 # v1
         with:
           prompt: |
             Summarize the following GitHub issue in one paragraph:
@@ -27,8 +25,10 @@ jobs:
 
       - name: Comment with AI summary
         run: |
-          gh issue comment $ISSUE_NUMBER --body '${{ steps.inference.outputs.response }}'
+          printf '%s' "$RESPONSE" > "$RUNNER_TEMP/issue-summary.md"
+          gh issue comment "$ISSUE_NUMBER" --repo "$GH_REPO" --body-file "$RUNNER_TEMP/issue-summary.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
           RESPONSE: ${{ steps.inference.outputs.response }}
