@@ -28,11 +28,37 @@
 
 .chip {
   border-radius: 5px;
-  border: none;
+  border: 1.5px solid #64748b;
+  background: #16202c;
   color: white;
-  text-shadow: 0 0 1.5px black;
   margin: 5px;
   cursor: pointer;
   padding: 4px 8px;
-  transition: background-color 200ms;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 1px solid #cbd5e1;
+}
+
+.chip[aria-pressed='false'] {
+  text-decoration: line-through;
+}
+
+.chip[aria-pressed='false'] .swatch {
+  visibility: hidden;
+}
+
+.chip:hover {
+  background: #293b50;
+}
+
+.chip:focus-visible {
+  outline: 3px solid #5cc9b5;
+  outline-offset: 3px;
 }

@@ -212,7 +212,7 @@ function SectionPlot({
           <button
             key={format}
             disabled={drawing || !!error || exporting !== null}
-            aria-label={`Export ${names[orientation]} ${format}`}
+            aria-label={`Export ${format} ${names[orientation]}`}
             onClick={() => void exportSection(format)}
           >
             Export {format}

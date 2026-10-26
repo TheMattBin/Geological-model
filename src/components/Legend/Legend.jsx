@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import PropTypes from 'prop-types';
 import * as styles from './Legend.module.css';
 
@@ -49,33 +49,11 @@ const createGradient = (colors) => {
 };
 
 const Chip = ({ index, color, enabled, onClick, value, label }) => {
-  const [hovered, setHovered] = useState(false);
-
-  const handleMouseEnter = () => setHovered(true);
-  const handleMouseLeave = () => setHovered(false);
-
   const cssColor = rgbaToCss(color);
-  let backgroundColor;
-  if (enabled) {
-    backgroundColor = hovered ? 'transparent' : cssColor;
-  } else {
-    backgroundColor = hovered ? cssColor : 'transparent';
-  }
 
   return (
-    <button
-      key={index}
-      aria-pressed={enabled}
-      style={{ backgroundColor, border: `1.5px solid ${cssColor}` }}
-      className={styles.chip}
-      datavalue={value}
-      onClick={(evt) => {
-        onClick(evt);
-        setHovered(!hovered);
-      }}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
+    <button key={index} aria-pressed={enabled} className={styles.chip} datavalue={value} onClick={onClick}>
+      <span className={styles.swatch} style={{ backgroundColor: cssColor }} aria-hidden='true' />
       {label}
     </button>
   );

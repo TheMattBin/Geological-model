@@ -128,9 +128,49 @@ jobs:
             playwright-report/visual/
           retention-days: 7
 
+  compatibility:
+    name: Browser and accessibility (${{ matrix.browser }})
+    needs: application
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      LIBGL_ALWAYS_SOFTWARE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: production-build
+          path: dist/
+      - run: npx playwright install --with-deps ${{ matrix.browser }}
+      # Firefox needs an X display to create its software GL context on the hosted Linux runner.
+      - name: Run Firefox with a virtual display
+        if: matrix.browser == 'firefox'
+        run: xvfb-run -a npm run test:compatibility -- --project=firefox --headed
+      - run: npm run test:compatibility -- --project=${{ matrix.browser }}
+        if: matrix.browser != 'firefox'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: compatibility-${{ matrix.browser }}-results
+          path: |
+            test-results/compatibility/
+            playwright-report/compatibility/
+          retention-days: 7
+
   checks:
     name: CI passed
-    needs: [application, data, renderer, production]
+    needs: [application, data, renderer, production, compatibility]
     if: always()
     runs-on: ubuntu-24.04
     timeout-minutes: 2

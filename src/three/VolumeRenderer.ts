@@ -157,6 +157,12 @@ export class VolumeRenderer {
   private createRenderer(transparent: boolean = true): THREE.WebGLRenderer {
     // Create a canvas element explicitly
     const canvas = document.createElement('canvas');
+    canvas.setAttribute('role', 'img');
+    canvas.setAttribute('aria-label', '3D geological volume');
+    canvas.setAttribute(
+      'aria-description',
+      'Drag to orbit. Use the camera view buttons for preset views and 2D sections for keyboard cell inspection.'
+    );
     this.container.appendChild(canvas);
 
     try {

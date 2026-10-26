@@ -357,7 +357,7 @@ test('both section orientations download annotated PNGs and complete CSVs', asyn
       'false'
     );
     const pngDownload = page.waitForEvent('download');
-    await dialog.getByRole('button', { name: `Export ${orientation} PNG`, exact: true }).click();
+    await dialog.getByRole('button', { name: `Export PNG ${orientation}`, exact: true }).click();
     const png = await pngDownload;
     expect(png.suggestedFilename()).toMatch(new RegExp(`geological-${prefix}-variable-0-cell-\\d+\\.png`));
     const path = `test-results/section-export-${prefix}.png`;
@@ -367,7 +367,7 @@ test('both section orientations download annotated PNGs and complete CSVs', asyn
     expect(bytes.readUInt32BE(16)).toBe(1200);
     expect(bytes.readUInt32BE(20)).toBeGreaterThan(700);
     const csvDownload = page.waitForEvent('download');
-    await dialog.getByRole('button', { name: `Export ${orientation} CSV`, exact: true }).click();
+    await dialog.getByRole('button', { name: `Export CSV ${orientation}`, exact: true }).click();
     const csv = await csvDownload;
     const rows = parseCSV(await readFile(await csv.path(), 'utf8'));
     expect(rows).toHaveLength(count);
@@ -380,6 +380,6 @@ test('both section orientations download annotated PNGs and complete CSVs', asyn
   await dialog.getByRole('combobox', { name: 'Section variable', exact: true }).selectOption('1');
   await expect(dialog.getByRole('img', { name: 'N–S section cells' })).toHaveAttribute('aria-busy', 'false');
   const continuousDownload = page.waitForEvent('download');
-  await dialog.getByRole('button', { name: 'Export N–S PNG', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Export PNG N–S', exact: true }).click();
   await (await continuousDownload).saveAs('test-results/section-export-continuous.png');
 });
