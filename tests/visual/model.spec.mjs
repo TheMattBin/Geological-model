@@ -52,3 +52,17 @@ test('mobile model and accessible controls', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Top view', exact: true })).not.toBeVisible();
   await modelSnapshot(page, 'mobile.png');
 });
+
+test('2D section maps preserve both geological orientations', async ({ page }) => {
+  await ready(page);
+  await page.getByRole('button', { name: '2D sections', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '2D sections', exact: true });
+  for (const [name, snapshot] of [
+    ['N–S', 'section-ns.png'],
+    ['W–E', 'section-we.png']
+  ]) {
+    const canvas = dialog.getByRole('img', { name: `${name} section cells` });
+    await expect(canvas).toHaveAttribute('aria-busy', 'false');
+    await expect(canvas).toHaveScreenshot(snapshot);
+  }
+});

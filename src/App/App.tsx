@@ -7,6 +7,7 @@ import MenuPanel from '@/components/MenuPanel/MenuPanel';
 import VisualizationPanel from '@/components/VisualizationPanel/VisualizationPanel';
 import VolumeController from '@/components/VolumeController/VolumeController';
 import ExplorationPanel from '@/components/ExplorationPanel/ExplorationPanel';
+import SectionViews from '@/components/SectionViews/SectionViews';
 import ErrorBoundary from '@/components/ErrorBoundary/ErrorBoundary';
 import { defaultView, readSavedView, reconcileView, writeSavedView } from '@three/savedView';
 import type { VolumeRenderer } from '@three/VolumeRenderer';
@@ -25,35 +26,64 @@ import styles from './App.module.css';
 function Explorer({ saved }: { saved: SavedView | null }) {
   const [metadata, setMetadata] = useState<VolumeMetadata | null>(null);
   const [renderer, setRenderer] = useState<VolumeRenderer | null>(null);
-  const [settings, setSettings] = useState<ViewSettings>(saved?.settings ?? defaultView);
+  const [settings, setSettings] = useState<ViewSettings>(defaultView);
   const [histogram, setHistogram] = useState<Histogram | null>(null);
   const [inspection, setInspection] = useState<VoxelInspection | null>(null);
-  const [ready, setReady] = useState(false);
+  const [histogramError, setHistogramError] = useState('');
+  const [viewNotice, setViewNotice] = useState(
+    window.location.hash.startsWith('#view=') && !saved
+      ? 'This saved link is invalid or predates dataset verification. Showing the default view.'
+      : ''
+  );
+  const initialized = useRef(false);
+  const [readyVariableId, setReadyVariableId] = useState<number | null>(null);
+  const ready = metadata !== null && settings.variableId !== null && readyVariableId === settings.variableId;
+  const [sectionsOpen, setSectionsOpen] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<'layers' | 'controls' | null>(null);
   const restored = useRef<VolumeRenderer | null>(null);
-  const { enableGrid, displayLegend, displayFault } = useUIContext();
+  const { enableGrid, displayLegend, displayFault, setEnableGrid, setDisplayLegend, setDisplayFault } = useUIContext();
   const selectedVariable = metadata?.variables.find((v) => v.id === settings.variableId);
-  const onMetadata = useCallback((value: VolumeMetadata | null) => {
-    setMetadata(value);
-    if (value)
-      setSettings((current) => {
-        const next = reconcileView(current, value);
-        const hidden = { ...next.hiddenClasses };
-        for (const variable of value.variables)
-          if (variable.type === 'discrete' && !hidden[variable.id]) {
-            hidden[variable.id] = (variable.colormap as DiscreteColor[])
-              .filter((c) => c.enabled === false)
-              .map((c) => c.value);
-          }
-        return { ...next, hiddenClasses: hidden };
-      });
-  }, []);
+  const onMetadata = useCallback(
+    (value: VolumeMetadata | null) => {
+      setMetadata(value);
+      if (value) {
+        const first = !initialized.current;
+        initialized.current = true;
+        const compatible = saved && value.datasetFingerprint === saved.datasetFingerprint;
+        if (first && saved) {
+          if (compatible) {
+            setEnableGrid(saved.display.enableGrid);
+            setDisplayLegend(saved.display.displayLegend);
+            setDisplayFault(saved.display.displayFault);
+          } else setViewNotice('This dataset has changed or cannot be verified. Showing the default view.');
+        }
+        setSettings((current) => {
+          const next = reconcileView(first && compatible ? saved.settings : current, value);
+          const hidden = { ...next.hiddenClasses };
+          for (const variable of value.variables)
+            if (variable.type === 'discrete' && !hidden[variable.id]) {
+              hidden[variable.id] = (variable.colormap as DiscreteColor[])
+                .filter((c) => c.enabled === false)
+                .map((c) => c.value);
+            }
+          return { ...next, hiddenClasses: hidden };
+        });
+      }
+    },
+    [saved, setEnableGrid, setDisplayLegend, setDisplayFault]
+  );
   useEffect(() => {
-    if (ready && renderer && saved && restored.current !== renderer) {
+    if (
+      ready &&
+      renderer &&
+      saved &&
+      metadata?.datasetFingerprint === saved.datasetFingerprint &&
+      restored.current !== renderer
+    ) {
       renderer.setCameraState(saved.camera);
       restored.current = renderer;
     }
-  }, [ready, renderer, saved]);
+  }, [ready, renderer, saved, metadata]);
   useEffect(() => {
     setInspection(null);
   }, [settings, enableGrid, displayFault]);
@@ -94,9 +124,11 @@ function Explorer({ saved }: { saved: SavedView | null }) {
     });
   const share = async () => {
     if (!renderer || settings.variableId === null) return 'Load a dataset first.';
+    if (!metadata?.datasetFingerprint) return 'Sharing requires dataset checksums. Reconvert this dataset first.';
     const hash = writeSavedView({
-      version: 1,
+      version: 2,
       dataset: dataPath,
+      datasetFingerprint: metadata.datasetFingerprint,
       settings,
       display: { enableGrid, displayLegend, displayFault },
       camera: renderer.getCameraState()
@@ -115,6 +147,7 @@ function Explorer({ saved }: { saved: SavedView | null }) {
         <Scene3D
           dataPath={dataPath}
           initialVariableId={saved?.settings.variableId ?? undefined}
+          initialDatasetFingerprint={saved?.datasetFingerprint}
           onMetadataChange={onMetadata}
           onRendererChange={setRenderer}
           onInspection={setInspection}
@@ -125,11 +158,13 @@ function Explorer({ saved }: { saved: SavedView | null }) {
         metadata={metadata}
         settings={settings}
         onHistogram={setHistogram}
-        onReady={setReady}
+        onHistogramError={setHistogramError}
+        onReadyVariable={setReadyVariableId}
       />
       <div className={styles.appLayout}>
         <header className={styles.appTitle}>
           <Title text='Geological Volume Explorer' size='large' />
+          {viewNotice && <p role='status'>{viewNotice}</p>}
         </header>
         <nav className={styles.mobileToolbar} aria-label='Viewer panels'>
           <button
@@ -152,6 +187,7 @@ function Explorer({ saved }: { saved: SavedView | null }) {
             <ErrorBoundary>
               <MenuPanel metadata={metadata} legendInfo={legendInfo} setLegendInfo={setLegendInfo} />
             </ErrorBoundary>
+            {histogramError && <p role='status'>{histogramError}</p>}
             <ExplorationPanel
               renderer={renderer}
               metadata={metadata}
@@ -159,6 +195,7 @@ function Explorer({ saved }: { saved: SavedView | null }) {
               inspection={inspection}
               ready={ready}
               share={share}
+              openSections={() => setSectionsOpen(true)}
             />
           </div>
           <div id='controls-panel' className={styles.rightPane} data-open={mobilePanel === 'controls'}>
@@ -186,13 +223,24 @@ function Explorer({ saved }: { saved: SavedView | null }) {
           </p>
         </footer>
       </div>
+      {sectionsOpen && metadata && (
+        <SectionViews
+          renderer={renderer}
+          metadata={metadata}
+          settings={settings}
+          ready={ready}
+          update={update}
+          selectVariable={selectVariable}
+          close={() => setSectionsOpen(false)}
+        />
+      )}
     </>
   );
 }
 export default function App() {
   const [saved] = useState(() => readSavedView(window.location.hash, dataPath));
   return (
-    <UIProvider initial={saved?.display}>
+    <UIProvider>
       <Explorer saved={saved} />
     </UIProvider>
   );

@@ -26,7 +26,9 @@ import type { DiscreteColor } from './types';
 import { AdaptiveQualityController } from './renderQuality.mjs';
 import { getCameraDistance, getNormalizedVolumeSize, validateVolumeMetadata } from './volumeGeometry.mjs';
 import type { PerformanceMetrics, Histogram, VoxelInspection, ColorStop } from './types';
-import { buildHistogram, inspectRay, physicalValue } from './volumeAnalysis';
+import { inspectRay, physicalValue } from './volumeAnalysis';
+import { computeHistogram } from './histogram';
+import type { SectionSource } from './types';
 
 export class VolumeRenderer {
   // Three.js core objects
@@ -54,6 +56,9 @@ export class VolumeRenderer {
   private qualityRecoveryFrames = 0;
   private cameraUniformDirty = true;
   private disposed = false;
+  private contextLost = false;
+  private histogramController: AbortController | null = null;
+  private onContextChange?: (lost: boolean) => void;
   private previousFrameTime: number | null = null;
   private grid: THREE.GridHelper | null = null;
   private gridVisible = true;
@@ -89,6 +94,7 @@ export class VolumeRenderer {
     this.container = options.container;
     this.onLoadingChange = options.onLoadingChange;
     this.onProgress = options.onProgress;
+    this.onContextChange = options.onContextChange;
     this.onError = options.onError;
     this.onPerformanceChange = options.onPerformanceChange;
     this.qualityController = new AdaptiveQualityController({
@@ -138,6 +144,8 @@ export class VolumeRenderer {
       window.addEventListener('resize', this.handleResize);
     }
 
+    this.renderer.domElement.addEventListener('webglcontextlost', this.handleContextLost);
+    this.renderer.domElement.addEventListener('webglcontextrestored', this.handleContextRestored);
     this.controls.addEventListener('start', this.handleInteractionStart);
     this.controls.addEventListener('change', this.handleControlsChange);
     this.controls.addEventListener('end', this.handleInteractionEnd);
@@ -215,6 +223,53 @@ export class VolumeRenderer {
     return controls;
   }
 
+  private handleContextLost = (event: Event): void => {
+    event.preventDefault();
+    if (this.disposed) return;
+    this.contextLost = true;
+    this.controls.enabled = false;
+    this.isInteracting = false;
+    this.previousFrameTime = null;
+    this.frameSamples = [];
+    if (this.animationFrameId !== null) cancelAnimationFrame(this.animationFrameId);
+    this.animationFrameId = null;
+    this.onContextChange?.(true);
+  };
+
+  private handleContextRestored = (): void => {
+    if (this.disposed) return;
+    // Three.js registers its restore listener first and rebuilds its internal GPU state.
+    // CPU texture data remains available for automatic re-upload on this fresh frame.
+    this.contextLost = false;
+    this.controls.enabled = true;
+    this.cameraUniformDirty = true;
+    this.previousFrameTime = null;
+    this.onContextChange?.(false);
+    this.requestRender();
+  };
+
+  private waitForContext(signal: AbortSignal): Promise<void> {
+    signal.throwIfAborted();
+    if (!this.contextLost) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const canvas = this.renderer.domElement;
+      const cleanup = () => {
+        canvas.removeEventListener('webglcontextrestored', restored);
+        signal.removeEventListener('abort', abort);
+      };
+      const restored = () => {
+        cleanup();
+        resolve();
+      };
+      const abort = () => {
+        cleanup();
+        reject(signal.reason);
+      };
+      canvas.addEventListener('webglcontextrestored', restored, { once: true });
+      signal.addEventListener('abort', abort, { once: true });
+    });
+  }
+
   private handleResize = (): void => {
     const width = this.container.clientWidth || window.innerWidth;
     const height = this.container.clientHeight || window.innerHeight;
@@ -228,7 +283,7 @@ export class VolumeRenderer {
   };
 
   private requestRender = (): void => {
-    if (this.disposed || this.animationFrameId !== null) return;
+    if (this.disposed || this.contextLost || this.animationFrameId !== null) return;
 
     this.renderRequested = true;
     this.animationFrameId = requestAnimationFrame(this.animate);
@@ -274,7 +329,7 @@ export class VolumeRenderer {
 
   private animate = (timestamp: number): void => {
     this.animationFrameId = null;
-    if (this.disposed || !this.renderRequested) return;
+    if (this.disposed || this.contextLost || !this.renderRequested) return;
 
     this.renderRequested = false;
     const frameTimeMs = this.previousFrameTime === null ? null : timestamp - this.previousFrameTime;
@@ -315,7 +370,8 @@ export class VolumeRenderer {
   /**
    * Load volume data from the specified path
    */
-  async loadData(basePath: string, initialVariableId?: number): Promise<void> {
+  async loadData(basePath: string, initialVariableId?: number, expectedFingerprint?: string): Promise<void> {
+    this.histogramController?.abort();
     this.loadController?.abort();
     this.variableController?.abort();
     this.selection++;
@@ -326,6 +382,7 @@ export class VolumeRenderer {
     let pending: Awaited<ReturnType<typeof loadVariable>> | undefined;
     try {
       const metadata = await loadMetadata(basePath, controller.signal);
+      await this.waitForContext(controller.signal);
       const gl = this.renderer.getContext() as WebGL2RenderingContext;
       checkVolumeLimits(metadata, gl.getParameter(gl.MAX_3D_TEXTURE_SIZE));
       if (
@@ -336,7 +393,11 @@ export class VolumeRenderer {
       ) {
         throw new Error('This device cannot interpolate float32 textures. Convert continuous data to uint8.');
       }
-      const variable = metadata.variables.find((v) => v.id === initialVariableId) ?? metadata.variables[0];
+      const initialId =
+        expectedFingerprint === undefined || metadata.datasetFingerprint === expectedFingerprint
+          ? initialVariableId
+          : undefined;
+      const variable = metadata.variables.find((v) => v.id === initialId) ?? metadata.variables[0];
       pending = await loadVariable(basePath, metadata, variable, controller.signal, this.onProgress);
       if (this.disposed || controller.signal.aborted) {
         pending.texture.dispose();
@@ -529,6 +590,7 @@ export class VolumeRenderer {
     if (!this.loadedVolume || !this.metadata || this.disposed) return;
     const variable = this.metadata.variables.find((v) => v.id === variableId);
     if (!variable) return;
+    this.histogramController?.abort();
     const selection = ++this.selection;
     this.variableController?.abort();
     const controller = new AbortController();
@@ -765,17 +827,41 @@ export class VolumeRenderer {
     this.requestRender();
   }
 
-  getHistogram(): Histogram | null {
+  getSectionSource(variableId: number): SectionSource | null {
+    if (this.disposed || this.state.activeVariableId !== variableId || !this.metadata) return null;
+    const variable = this.metadata.variables.find((entry) => entry.id === variableId);
+    const data = this.loadedVolume?.textures.get(variableId)?.image.data;
+    return variable && data ? { data, variable, metadata: this.metadata } : null;
+  }
+
+  async getHistogram(signal?: AbortSignal): Promise<Histogram | null> {
     const id = this.state.activeVariableId;
     const variable = this.metadata?.variables.find((v) => v.id === id);
     const texture = this.loadedVolume?.textures.get(id);
-    if (!variable || variable.type !== 'continuous' || !texture) return null;
-    if (!this.histogramCache.has(id)) this.histogramCache.set(id, buildHistogram(texture.image.data!, variable));
-    return this.histogramCache.get(id)!;
+    if (!variable || variable.type !== 'continuous' || !texture || this.disposed) return null;
+    signal?.throwIfAborted();
+    if (this.histogramCache.has(id)) return this.histogramCache.get(id)!;
+    this.histogramController?.abort();
+    const controller = new AbortController();
+    this.histogramController = controller;
+    const abort = () => controller.abort();
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      const histogram = await computeHistogram(
+        texture.image.data as Uint8Array | Float32Array,
+        variable,
+        controller.signal
+      );
+      controller.signal.throwIfAborted();
+      this.histogramCache.set(id, histogram);
+      return histogram;
+    } finally {
+      signal?.removeEventListener('abort', abort);
+    }
   }
 
   inspect(clientX: number, clientY: number): VoxelInspection | null {
-    if (!this.volumeMesh || !this.metadata || !this.loadedVolume) return null;
+    if (this.contextLost || !this.volumeMesh || !this.metadata || !this.loadedVolume) return null;
     const variable = this.metadata.variables.find((v) => v.id === this.state.activeVariableId)!;
     const data = this.loadedVolume.textures.get(variable.id)?.image.data;
     if (!data || (variable.type === 'continuous' && this.continuousOpacity === 0)) return null;
@@ -856,6 +942,7 @@ export class VolumeRenderer {
 
   /** Render and copy in the same task; no persistent drawing buffer is needed. */
   exportImage(): string {
+    if (this.contextLost) throw new Error('The graphics context is recovering. Try exporting again after recovery.');
     if (!this.metadata) throw new Error('Load a dataset before exporting.');
     this.updateCameraUniform();
     this.renderer.render(this.scene, this.camera);
@@ -1043,6 +1130,7 @@ export class VolumeRenderer {
    */
   dispose(): void {
     this.disposed = true;
+    this.histogramController?.abort();
     this.loadController?.abort();
     this.variableController?.abort();
     this.disposeAnnotations();
@@ -1056,6 +1144,8 @@ export class VolumeRenderer {
 
     this.resizeObserver?.disconnect();
     if (this.usesWindowResize) window.removeEventListener('resize', this.handleResize);
+    this.renderer.domElement.removeEventListener('webglcontextlost', this.handleContextLost);
+    this.renderer.domElement.removeEventListener('webglcontextrestored', this.handleContextRestored);
     this.controls.removeEventListener('start', this.handleInteractionStart);
     this.controls.removeEventListener('change', this.handleControlsChange);
     this.controls.removeEventListener('end', this.handleInteractionEnd);

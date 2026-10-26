@@ -52,6 +52,8 @@ export function parseMetadata(input: unknown): VolumeMetadata {
     ids.add(v.id);
     text(v.name, `${path}.name`);
     text(v.file, `${path}.file`);
+    if (v.sha256 !== undefined && (typeof v.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(v.sha256)))
+      fail(`${path}.sha256`, 'expected a lowercase SHA-256 digest');
     if (!/^[\w.-]+(?:\/[\w.-]+)*$/.test(v.file) || v.file.split('/').some((part: string) => part === '..'))
       fail(`${path}.file`, 'use a relative dataset file path');
     if (!['uint8', 'float32'].includes(v.dtype)) fail(`${path}.dtype`, 'expected uint8 or float32');

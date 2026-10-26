@@ -5,6 +5,8 @@
 /** Metadata for the voxel volume */
 export interface VolumeMetadata {
   schemaVersion?: 1;
+  /** Computed from validated metadata and raw-file checksums at load time. */
+  datasetFingerprint?: string;
   coordinateUnit?: string;
   provenance?: { source?: string; coordinateSystem?: string; conversion?: string };
   description?: string;
@@ -27,6 +29,7 @@ export interface VariableMetadata {
   id: number;
   name: string;
   file: string;
+  sha256?: string;
   dtype: 'uint8' | 'float32';
   type: 'discrete' | 'continuous';
   unit?: string;
@@ -85,6 +88,7 @@ export interface VolumeRendererOptions {
   /** Callback when loading state changes */
   onLoadingChange?: (loading: boolean) => void;
   onProgress?: (message: string) => void;
+  onContextChange?: (lost: boolean) => void;
   /** Callback when an error occurs */
   onError?: (error: Error) => void;
   /** Development-only frame performance callback */
@@ -173,9 +177,47 @@ export interface DisplaySettings {
 }
 
 export interface SavedView {
-  version: 1;
+  version: 2;
   dataset: string;
+  datasetFingerprint: string;
   settings: ViewSettings;
   display: DisplaySettings;
   camera: CameraState;
+}
+
+export type SectionOrientation = 'NS' | 'WE';
+
+/** Borrowed CPU data; consumers must not mutate or detach the renderer buffer. */
+export interface SectionSource {
+  data: ArrayLike<number>;
+  variable: VariableMetadata;
+  metadata: VolumeMetadata;
+}
+
+export interface SectionStyle {
+  hiddenClasses: number[];
+  displayFault: boolean;
+  valueWindow: [number, number];
+}
+
+export interface SectionLayout {
+  orientation: SectionOrientation;
+  fixedAxis: 'x' | 'y';
+  horizontalAxis: 'x' | 'y';
+  cell: number;
+  position: number;
+  center: number;
+  width: number;
+  height: number;
+  physicalWidth: number;
+  physicalHeight: number;
+}
+
+export interface SectionSample {
+  indices: [number, number, number];
+  coordinates: [number, number, number];
+  value: number | null;
+  label?: string;
+  unit?: string;
+  status: 'visible' | 'missing' | 'filtered' | 'unmapped';
 }

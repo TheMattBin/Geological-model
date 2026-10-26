@@ -64,6 +64,15 @@ test('production assets load, both variables work, saved views restore, and PNG 
   expect(png.readUInt32BE(20)).toBeGreaterThan(1000); // Export includes a provenance/legend footer.
   await page.getByLabel('Lithology', { exact: true }).check();
   await expect(page.getByRole('button', { name: 'Clay', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '2D sections', exact: true }).click();
+  const sections = page.getByRole('dialog', { name: '2D sections', exact: true });
+  const section = sections.getByRole('img', { name: 'N–S section cells' });
+  await expect(section).toHaveAttribute('aria-busy', 'false');
+  await section.focus();
+  await section.press('Home');
+  await expect(sections.getByRole('status', { name: 'N–S section inspection' })).toContainText('Center:');
+  await sections.getByRole('button', { name: 'Close sections' }).click();
+  await expect(sections).toHaveCount(0);
   await expect(page.getByRole('alert')).toHaveCount(0);
   expect(errors).toEqual([]);
 });

@@ -405,6 +405,10 @@ test('saved views restore filters, classes, visibility and camera; exported PNG 
   await page.getByRole('button', { name: 'Share view' }).click();
   await expect(page).toHaveURL(/#view=/);
   const saved = new URL(page.url()).hash;
+  const restoredDownloads = [];
+  page.on('request', (request) => {
+    if (request.url().endsWith('.raw')) restoredDownloads.push(new URL(request.url()).pathname);
+  });
   await page.reload();
   await expect(page.getByRole('button', { name: 'Share view' })).toBeEnabled();
   await expect(page.getByLabel('Permeability', { exact: true })).toBeChecked();
@@ -418,6 +422,8 @@ test('saved views restore filters, classes, visibility and camera; exported PNG 
   await page.getByRole('button', { name: 'Share view' }).click();
   const before = JSON.parse(decodeURIComponent(saved.slice(6)));
   const after = JSON.parse(decodeURIComponent(new URL(page.url()).hash.slice(6)));
+  expect(restoredDownloads).toEqual(['/data/permeability.raw']);
+  expect(after.datasetFingerprint).toBe(before.datasetFingerprint);
   expect(after.settings).toEqual(before.settings);
   expect(after.display).toEqual(before.display);
   for (let i = 0; i < 3; i++) {
@@ -451,7 +457,8 @@ test('malformed or incompatible saved URLs are ignored safely', async ({ page })
   const result = await page.evaluate(async () => {
     const { readSavedView, writeSavedView, defaultView } = await import('/src/three/savedView.ts');
     const valid = {
-      version: 1,
+      version: 2,
+      datasetFingerprint: 'a'.repeat(64),
       dataset: './data',
       settings: { ...defaultView, variableId: 0 },
       display: { enableGrid: true, displayLegend: true, displayFault: true },
@@ -459,7 +466,7 @@ test('malformed or incompatible saved URLs are ignored safely', async ({ page })
     };
     const variants = [
       null,
-      { ...valid, version: 2 },
+      { ...valid, version: 1 },
       { ...valid, dataset: '/other' },
       { ...valid, camera: { ...valid.camera, zoom: 0 } },
       { ...valid, settings: { ...valid.settings, valueWindow: [1, 0] } }
@@ -531,7 +538,7 @@ test('small float measurements are filtered in physical units without being mist
     const { isMissing } = await import('/src/three/volumeAnalysis.ts');
     return {
       alpha: pixel[3],
-      histogram: r.getHistogram(),
+      histogram: await r.getHistogram(),
       roundedSentinel: isMissing(Math.fround(0.1), { dtype: 'float32', noDataValue: 0.1 })
     };
   });
@@ -559,4 +566,163 @@ test('failed variable loads can be retried without leaving a stale selection', a
   await expect(page.getByRole('img', { name: /valid voxels/ })).toBeVisible();
   await expect(page.getByLabel('Permeability', { exact: true })).toBeChecked();
   await expect(page.getByRole('button', { name: 'Share view' })).toBeEnabled();
+});
+
+test('a lost WebGL context recovers the current view without user interaction', async ({ page }) => {
+  await loadRenderer(page);
+  await page.evaluate(() => {
+    const r = window.volume;
+    r.setVerticalExaggeration(2);
+    r.setSection('NS', true, 0.42);
+    window.cameraBefore = r.getCameraState();
+    window.loss = r.renderer.getContext().getExtension('WEBGL_lose_context');
+    window.loss.loseContext();
+  });
+  await expect.poll(() => page.evaluate(() => window.volume.contextLost)).toBe(true);
+  expect(await page.evaluate(() => window.volume.animationFrameId)).toBeNull();
+  await page.evaluate(() => window.loss.restoreContext());
+  await expect.poll(() => page.evaluate(() => window.volume.contextLost)).toBe(false);
+  await expect.poll(() => page.evaluate(() => window.volume.renderer.info.render.calls)).toBeGreaterThan(0);
+  const result = await page.evaluate(() => {
+    const r = window.volume;
+    r.updateCameraUniform();
+    r.renderer.render(r.scene, r.camera);
+    const gl = r.renderer.getContext();
+    const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);
+    gl.readPixels(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+    return {
+      visible: pixels.some((v, i) => i % 4 === 3 && v > 50),
+      camera: r.getCameraState(),
+      before: window.cameraBefore,
+      state: r.getState()
+    };
+  });
+  expect(result.visible).toBe(true);
+  for (const key of ['position', 'target'])
+    result.before[key].forEach((value, index) => expect(result.camera[key][index]).toBeCloseTo(value, 10));
+  expect(result.camera.zoom).toBe(result.before.zoom);
+  expect(result.state.verticalExaggeration).toBe(2);
+  expect(result.state.sections.NS.position).toBe(0.42);
+  await page.screenshot({ path: 'test-results/context-restored.png' });
+});
+
+test('context loss is visible in the application and offers a reload', async ({ page }) => {
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Reset camera' })).toBeEnabled();
+  await page.evaluate(() => {
+    const gl = document.querySelector('canvas').getContext('webgl2');
+    window.loss = gl.getExtension('WEBGL_lose_context');
+    window.loss.loseContext();
+  });
+  await expect(page.getByText('Graphics connection lost. Waiting for recovery…')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Reload viewer' })).toBeVisible();
+  await page.screenshot({ path: 'test-results/context-loss-message.png' });
+  await page.evaluate(() => window.loss.restoreContext());
+  await expect(page.getByText('Graphics connection lost. Waiting for recovery…')).toHaveCount(0);
+  await page.mouse.click(720, 500);
+  await expect(page.getByRole('status', { name: 'Voxel inspection result' })).toBeVisible();
+});
+
+test('histogram workers preserve data, yield between chunks, and cancel cleanly', async ({ page }) => {
+  await loadRenderer(page);
+  const result = await page.evaluate(async () => {
+    const { computeHistogram } = await import('/src/three/histogram.ts');
+    const data = new Uint8Array(4 * 1024 * 1024).fill(254);
+    data[0] = 0;
+    data[1] = 255;
+    const variable = {
+      type: 'continuous',
+      dtype: 'uint8',
+      range: { min: 10, max: 20 },
+      encodingRange: { min: 0, max: 254 / 255 },
+      noDataValue: 255
+    };
+    let ticks = 0;
+    const timer = setInterval(() => ticks++, 0);
+    const histogram = await computeHistogram(data, variable, new AbortController().signal);
+    clearInterval(timer);
+    const abort = new AbortController();
+    const cancelled = computeHistogram(data, variable, abort.signal).catch((error) => error.name);
+    abort.abort();
+    const float = await computeHistogram(
+      new Float32Array([0, 1, 2, NaN, -999]),
+      { type: 'continuous', dtype: 'float32', range: { min: 0, max: 2 }, noDataValue: -999 },
+      new AbortController().signal
+    );
+    return {
+      histogram,
+      ticks,
+      cancelled: await cancelled,
+      byteLength: data.byteLength,
+      first: [...data.slice(0, 3)],
+      float
+    };
+  });
+  expect(result.histogram.valid).toBe(4 * 1024 * 1024 - 1);
+  expect(result.histogram.missing).toBe(1);
+  expect(result.histogram.bins[0]).toBe(1);
+  expect(result.histogram.bins[31]).toBe(4 * 1024 * 1024 - 2);
+  expect(result.ticks).toBeGreaterThan(0);
+  expect(result.cancelled).toBe('AbortError');
+  expect(result.byteLength).toBe(4 * 1024 * 1024);
+  expect(result.first).toEqual([0, 255, 254]);
+  expect(result.float.valid).toBe(3);
+  expect(result.float.missing).toBe(2);
+});
+
+test('saved views reject a replaced dataset and legacy links', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('Permeability', { exact: true }).check();
+  await expect(page.getByRole('button', { name: 'Share view', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Share view', exact: true }).click();
+  const original = page.url();
+  await page.route('**/data/metadata.json', async (route) => {
+    const response = await route.fetch();
+    const metadata = await response.json();
+    metadata.description = 'A different survey at the same path';
+    await route.fulfill({ json: metadata });
+  });
+  await page.reload();
+  await expect(
+    page.getByText('This dataset has changed or cannot be verified. Showing the default view.')
+  ).toBeVisible();
+  await expect(page.getByLabel('Lithology', { exact: true })).toBeChecked();
+  await page.screenshot({ path: 'test-results/dataset-changed-message.png' });
+  const legacy = JSON.parse(decodeURIComponent(new URL(original).hash.slice(6)));
+  legacy.version = 1;
+  await page.goto('/#view=' + encodeURIComponent(JSON.stringify(legacy)));
+  await page.reload();
+  await expect(
+    page.getByText('This saved link is invalid or predates dataset verification. Showing the default view.')
+  ).toBeVisible();
+});
+
+test('fingerprints ignore key order and raw corruption is rejected', async ({ page }) => {
+  await loadRenderer(page);
+  const result = await page.evaluate(async () => {
+    const { fingerprintMetadata } = await import('/src/three/datasetIdentity.ts');
+    const metadata = window.volume.getMetadata();
+    const reordered = Object.fromEntries(Object.entries(metadata).reverse());
+    const changed = structuredClone(metadata);
+    changed.variables[0].sha256 = '0'.repeat(64);
+    const legacy = structuredClone(metadata);
+    delete legacy.variables[0].sha256;
+    return {
+      original: metadata.datasetFingerprint,
+      reordered: await fingerprintMetadata(reordered),
+      changed: await fingerprintMetadata(changed),
+      legacy: (await fingerprintMetadata(legacy)) ?? null
+    };
+  });
+  expect(result.reordered).toBe(result.original);
+  expect(result.changed).not.toBe(result.original);
+  expect(result.legacy).toBeNull();
+  await page.route('**/data/lithology.raw', async (route) => {
+    const response = await route.fetch();
+    const bytes = await response.body();
+    bytes[0] ^= 1;
+    await route.fulfill({ body: bytes });
+  });
+  await page.goto('/');
+  await expect(page.getByRole('alert')).toContainText('checksum mismatch');
 });

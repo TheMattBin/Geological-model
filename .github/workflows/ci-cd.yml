@@ -45,7 +45,11 @@ jobs:
           retention-days: 7
 
   data:
-    name: Data conversion
+    name: Data conversion (${{ matrix.dependencies }})
+    strategy:
+      fail-fast: false
+      matrix:
+        dependencies: [minimum, current]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -57,7 +61,13 @@ jobs:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: scripts/requirements.txt
-      - run: python -m pip install -r scripts/requirements.txt
+      - name: Install minimum supported dependencies
+        if: matrix.dependencies == 'minimum'
+        run: python -m pip install -r scripts/requirements.txt -c scripts/constraints-minimum.txt
+      - name: Install current compatible dependencies
+        if: matrix.dependencies == 'current'
+        run: python -m pip install --upgrade -r scripts/requirements.txt
+      - run: python -m pip check
       - run: python -m unittest discover -s tests -p 'test_*.py'
 
   renderer:

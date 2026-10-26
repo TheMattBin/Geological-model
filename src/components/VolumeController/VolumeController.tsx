@@ -8,7 +8,8 @@ interface Props {
   metadata: VolumeMetadata | null;
   settings: ViewSettings;
   onHistogram: (histogram: Histogram | null) => void;
-  onReady: (ready: boolean) => void;
+  onHistogramError: (message: string) => void;
+  onReadyVariable: (variableId: number | null) => void;
 }
 
 /** All asynchronous selection completes before variable-dependent styles are applied. */
@@ -17,31 +18,41 @@ export default function VolumeController({
   metadata,
   settings,
   onHistogram,
-  onReady
+  onHistogramError,
+  onReadyVariable
 }: Props) {
   const { enableGrid, displayFault } = useUIContext();
   const [loadedId, setLoadedId] = useState<number | null>(null);
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
     setLoadedId(null);
     onHistogram(null);
-    onReady(false);
+    onHistogramError('');
+    onReadyVariable(null);
     if (!renderer || !metadata || settings.variableId === null) return;
     renderer
       .setActiveVariable(settings.variableId)
-      .then(() => {
+      .then(async () => {
         if (cancelled || renderer.getState().activeVariableId !== settings.variableId) return;
         setLoadedId(settings.variableId);
-        onHistogram(renderer.getHistogram());
-        onReady(true);
+        onReadyVariable(settings.variableId);
+        try {
+          const histogram = await renderer.getHistogram(controller.signal);
+          if (!cancelled) onHistogram(histogram);
+        } catch (error) {
+          if (!controller.signal.aborted)
+            onHistogramError('Value distribution unavailable. Select the variable again to retry.');
+        }
       })
       .catch(() => {
         /* Renderer reports actionable loading errors through Scene3D. */
       });
     return () => {
       cancelled = true;
+      controller.abort();
     };
-  }, [renderer, metadata, settings.variableId, onHistogram, onReady]);
+  }, [renderer, metadata, settings.variableId, onHistogram, onHistogramError, onReadyVariable]);
 
   useEffect(() => {
     if (!renderer || !metadata) return;
