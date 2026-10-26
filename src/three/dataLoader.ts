@@ -6,6 +6,7 @@
 
 import * as THREE from 'three';
 import { parseMetadata } from './metadata';
+import { fingerprintMetadata, sha256 } from './datasetIdentity';
 import type { VolumeMetadata, VariableMetadata, ColorStop, DiscreteColor } from './types';
 
 export interface LoadedVolume {
@@ -22,7 +23,10 @@ export async function loadMetadata(basePath: string, signal?: AbortSignal): Prom
   if (!response.ok) {
     throw new Error(`Failed to load metadata: ${response.statusText}`);
   }
-  return parseMetadata(await response.json());
+  const metadata = parseMetadata(await response.json());
+  metadata.datasetFingerprint = await fingerprintMetadata(metadata);
+  signal?.throwIfAborted();
+  return metadata;
 }
 
 /**
@@ -209,6 +213,9 @@ export async function loadVariable(
   } else {
     data = await response.arrayBuffer();
   }
+  if (variable.sha256 && (await sha256(data)) !== variable.sha256)
+    throw new Error(`${variable.name}: checksum mismatch. Reload or reconvert the dataset.`);
+  signal?.throwIfAborted();
   const texture = createVolumeTexture(
     data,
     metadata.dimensions,

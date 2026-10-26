@@ -11,8 +11,17 @@ interface Props {
   inspection: VoxelInspection | null;
   ready: boolean;
   share: () => Promise<string>;
+  openSections: () => void;
 }
-export default function ExplorationPanel({ renderer, metadata, histogram, inspection, ready, share }: Props) {
+export default function ExplorationPanel({
+  renderer,
+  metadata,
+  histogram,
+  inspection,
+  ready,
+  share,
+  openSections
+}: Props) {
   const [message, setMessage] = useState('');
   const max = Math.max(1, ...(histogram?.bins ?? []));
   const exportImage = () => {
@@ -83,6 +92,9 @@ export default function ExplorationPanel({ renderer, metadata, histogram, inspec
           </button>
           <button disabled={!ready} onClick={exportImage}>
             Export PNG
+          </button>
+          <button disabled={!ready} onClick={openSections}>
+            2D sections
           </button>
         </div>
         {message && <p role='status'>{message}</p>}

@@ -6,6 +6,7 @@ import type { PerformanceMetrics, VolumeMetadata, VoxelInspection } from '@three
 interface Props {
   dataPath: string;
   initialVariableId?: number;
+  initialDatasetFingerprint?: string;
   onMetadataChange: (metadata: VolumeMetadata | null) => void;
   onRendererChange: (renderer: VolumeRenderer | null) => void;
   onInspection: (inspection: VoxelInspection | null) => void;
@@ -13,6 +14,7 @@ interface Props {
 export default function Scene3D({
   dataPath,
   initialVariableId,
+  initialDatasetFingerprint,
   onMetadataChange,
   onRendererChange,
   onInspection
@@ -22,6 +24,7 @@ export default function Scene3D({
   const [progress, setProgress] = useState('Loading dataset metadata…');
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<PerformanceMetrics | null>(null);
+  const [contextLost, setContextLost] = useState(false);
   const [retry, setRetry] = useState(0);
   useEffect(() => {
     let cancelled = false,
@@ -32,6 +35,7 @@ export default function Scene3D({
     let start: { x: number; y: number } | null = null;
     const container = containerRef.current!;
     setLoading(true);
+    setContextLost(false);
     setError(null);
     onMetadataChange(null);
     const down = (event: PointerEvent) => {
@@ -69,6 +73,9 @@ export default function Scene3D({
               }
             }
           },
+          onContextChange: (lost) => {
+            if (!cancelled) setContextLost(lost);
+          },
           onProgress: (value) => {
             if (!cancelled) setProgress(value);
           },
@@ -84,7 +91,7 @@ export default function Scene3D({
         container.addEventListener('pointerdown', down);
         container.addEventListener('pointerup', up);
         renderer
-          .loadData(dataPath, initialVariableId)
+          .loadData(dataPath, initialVariableId, initialDatasetFingerprint)
           .then(() => {
             if (!cancelled) onMetadataChange(renderer!.getMetadata());
           })
@@ -108,15 +115,21 @@ export default function Scene3D({
       renderer?.dispose();
       onRendererChange(null);
     };
-  }, [dataPath, initialVariableId, onMetadataChange, onRendererChange, onInspection, retry]);
+  }, [dataPath, initialVariableId, initialDatasetFingerprint, onMetadataChange, onRendererChange, onInspection, retry]);
   return (
     <div className={styles.sceneContainer} ref={containerRef} aria-label='Geological model'>
-      {loading && (
+      {contextLost && (
+        <div className={styles.error} role='status'>
+          <p>Graphics connection lost. Waiting for recovery…</p>
+          <button onClick={() => setRetry((value) => value + 1)}>Reload viewer</button>
+        </div>
+      )}
+      {loading && !contextLost && (
         <div className={styles.loading} role='status'>
           {progress}
         </div>
       )}
-      {error && (
+      {error && !contextLost && (
         <div className={styles.error} role='alert'>
           {error}
           <br />

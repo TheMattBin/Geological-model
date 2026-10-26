@@ -16,6 +16,7 @@ Output:
 
 import argparse
 import json
+import hashlib
 import os
 import struct
 from pathlib import Path
@@ -169,6 +170,13 @@ def save_binary(data: np.ndarray, filepath: str, dtype: str = 'uint8'):
     print(f"Saved: {filepath} ({os.path.getsize(filepath) / 1024 / 1024:.2f} MB)")
 
 
+def add_checksums(metadata: dict, directory: Path):
+    """Bind published metadata to the exact binary files without loading another copy."""
+    for variable in metadata['variables']:
+        with open(directory / variable['file'], 'rb') as stream:
+            variable['sha256'] = hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
 def convert_netcdf(input_path: str, output_dir: str, lithology_var: str = None, permeability_var: str = None, coordinate_system: str = None):
     """Main conversion function."""
     output_path = Path(output_dir)
@@ -288,6 +296,7 @@ def convert_netcdf(input_path: str, output_dir: str, lithology_var: str = None, 
         })
         print(f"Processed permeability: range [{min_val:.4f}, {max_val:.4f}]")
 
+    add_checksums(metadata, output_path)
     # Save metadata
     metadata_path = output_path / 'metadata.json'
     with open(metadata_path, 'w') as f:
@@ -370,6 +379,7 @@ def create_sample_data(output_dir: str):
         ]
     }
 
+    add_checksums(metadata, output_path)
     with open(output_path / 'metadata.json', 'w') as f:
         json.dump(metadata, f, indent=2)
 

@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
@@ -25,6 +26,7 @@ class ConversionTests(unittest.TestCase):
             self.assertIn('2026', metadata['provenance']['conversion'])
             dims = metadata['dimensions']
             for variable in metadata['variables']:
+                self.assertEqual(variable['sha256'], hashlib.sha256(Path(first, variable['file']).read_bytes()).hexdigest())
                 self.assertEqual(Path(first, variable['file']).stat().st_size, dims['x'] * dims['y'] * dims['z'])
             data = np.fromfile(Path(first, 'lithology.raw'), dtype=np.uint8).reshape(dims['z'], dims['y'], dims['x'])
             self.assertTrue(metadata['synthetic'])

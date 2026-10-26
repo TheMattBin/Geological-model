@@ -8,9 +8,11 @@ Features include categorical lithology, continuous volume rendering, class/fault
 
 - **Inspect:** click the model to report the first visible voxel along the ray. The result includes its stored value or class, zero-based X/Y/Z indices, and physical cell-center coordinates. Cuts, missing data, hidden classes/faults, opacity, and value filters are respected. At an isosurface, inspection reports the voxel at the first sampled crossing; it is not an interpolated surface measurement.
 - **Measure:** N–S and W–E sliders show physical coordinates as well as percentages. Zero hides the entire clipped volume; 100% restores that axis. Coordinates and the horizontal scale bar use original dataset units and are independent of vertical exaggeration. Toggle the grid to show/hide the ground, axes and scale together.
-- **Filter continuous data:** adjust opacity and the minimum/maximum value window. The histogram describes the entire active variable, excluding missing values; clipping does not recompute it. Isosurfaces also respect the value window.
+- **Filter continuous data:** adjust opacity and the minimum/maximum value window. The histogram describes the entire active variable, excluding missing values; clipping does not recompute it. Computation runs in a cancellable worker with 1 MiB chunks, keeping the UI responsive and preserving the renderer buffer. Isosurfaces also respect the value window.
 - **Navigate:** use Reset camera, Top, Front (looking north), and Side (looking west) presets. On narrow screens, open the Legend & explore or Visualization controls panel from the toolbar.
-- **Share view:** save the camera, variable, sections, exaggeration, continuous controls, class visibility and display switches into the URL fragment. The app copies the link where clipboard access is available; otherwise copy the address bar. Open/reload that URL to restore it. Links refer to the configured dataset path, so they require the same deployed dataset and do not embed data or detect later dataset replacement. Invalid/incompatible links fall back to defaults.
+- **2D sections:** open **2D sections** in Explore for synchronized N–S and W–E cell maps. N–S holds X constant and shows Y horizontally; W–E holds Y constant and shows X horizontally. Elevation increases upward. Each map preserves physical proportions with the current vertical exaggeration and reports original cell-center coordinates. Click/tap a cell or focus the map and use arrow keys (Home/End for corners). The section sliders, selected variable and exaggeration update the 3D controls and saved view. At a cell boundary the map selects the cell on the positive side; the 100% endpoint selects the final cell. The requested plane and sampled cell center are both shown.
+- Section maps apply class/fault visibility and the continuous value window. Volume opacity and isosurfaces affect the 3D rendering only. Checkerboard cells can be missing, filtered, unmapped or transparent; inspection distinguishes missing values from valid class zero. Each map shows its complete plane, independently of the other section cut or the 3D cut visibility switch. Drawing reuses loaded CPU data, yields in bounded batches for large maps, and cancels when controls change or the dialog closes.
+- **Share view:** save the camera, variable, sections, exaggeration, continuous controls, class visibility and display switches into the URL fragment. The app copies the link where clipboard access is available; otherwise copy the address bar. Open/reload that URL to restore it. Links include the dataset path and a SHA-256 fingerprint of metadata and raw-file checksums. Restoration waits for a matching identity; changed datasets, invalid links and older version-1 links fall back to defaults with a notice. Links do not embed data. Sharing requires checksummed metadata produced by the converter; older datasets still load, but must be reconverted before sharing. Checksummed datasets require HTTPS or localhost.
 - **Export PNG:** download the rendered scene with a legend, section percentages, exaggeration, continuous settings and synthetic/source disclosure. Export remains available when the on-screen legend is hidden.
 
 Inspection returns stored voxel values. Continuous rendering can interpolate between those values, and isosurface inspection is approximate at voxel resolution.
@@ -39,7 +41,7 @@ Browser tests run with software WebGL for portability and save screenshots under
 
 ## Sample and custom data
 
-Create a Python environment for data tools:
+Create a Python 3.11+ environment for data tools (CI uses 3.12):
 
 ```bash
 python -m venv .venv
@@ -97,9 +99,9 @@ Missing-value textures use nearest sampling to prevent sentinel values blending 
 
 ## Loading and device limits
 
-Only the initial selected variable is downloaded at startup. Other variables load on demand with byte progress and cancellation; cached revisits avoid network requests. Failed loads offer a retry. The cache retains at most 256 MiB of raw variable data, evicting least recently used inactive entries. CPU data is retained for inspection and histograms, and uploaded variables also require GPU memory; changing variables can temporarily exceed the cache target while a new download completes.
+Only the initial selected variable downloads at startup. A saved selection is used only after metadata identity verification; mismatched links load the default variable. Other variables load on demand with byte progress and cancellation; cached revisits avoid network requests. Failed loads offer a retry. The cache retains at most 256 MiB of raw variable data, evicting least recently used inactive entries. CPU data is retained for inspection and histograms, and uploaded variables also require GPU memory; changing variables can temporarily exceed the cache target while a new download completes.
 
-Before downloading data, the viewer checks the device's maximum 3D texture dimension and rejects variables larger than 256 MiB each with a downsampling message. Continuous float32 interpolation also requires device support. These are conservative application limits, not a guarantee that a device has enough free GPU memory. The viewer still uses whole-volume textures, not tiled/streamed bricks. Hardware performance needs testing on representative datasets and devices.
+Before downloading data, the viewer checks the device's maximum 3D texture dimension and rejects variables larger than 256 MiB each with a downsampling message. Continuous float32 interpolation also requires device support. These are conservative application limits, not a guarantee that a device has enough free GPU memory. On WebGL context loss the viewer pauses rendering and offers a reload; automatic restoration re-uploads retained textures and requests a fresh frame while preserving camera and filters. The viewer still uses whole-volume textures, not tiled/streamed bricks. Hardware performance needs testing on representative datasets and devices.
 
 ## Structure and deployment
 
@@ -112,7 +114,7 @@ docker build -t geological-model .
 docker run --rm -p 8080:80 geological-model
 ```
 
-The `CI` workflow runs on pull requests and pushes to `main`. Application checks, Python conversion tests, and development renderer tests run in parallel. The application job builds once; production smoke and visual tests download that artifact and serve it under `/Geological-model/` to catch project-path asset failures. The `CI passed` job succeeds only when every validation job succeeds. Superseded PR runs are cancelled; main runs do not cancel an active deployment.
+The `CI` workflow runs on pull requests and pushes to `main`. Application checks, Python conversion tests, and development renderer tests run in parallel. Python 3.12 runs the converter and checkpoint tests against both minimum supported versions (`scripts/constraints-minimum.txt`) and current compatible releases. Keep the minimum constraints aligned with `scripts/requirements.txt`. The application job builds once; production smoke and visual tests download that artifact and serve it under `/Geological-model/` to catch project-path asset failures. The `CI passed` job succeeds only when every validation job succeeds. Superseded PR runs are cancelled; main runs do not cancel an active deployment.
 
 After successful validation on `main`, GitHub Pages receives the same build artifact. A final smoke test checks the deployed commit through `revision.json`, both dataset variables, saved-view restoration, and PNG export. A failed deployment check is visible as a failed workflow; it does not automatically roll back the site. To roll back, revert the offending commit and let CI validate and deploy the revert.
 
@@ -140,8 +142,14 @@ npm run test:visual
 
 The bundle gate sums gzip level-9 sizes of all JavaScript and CSS assets, including lazy chunks. Budgets in `bundle-budget.json` are 240 KiB JavaScript and 4 KiB CSS; the initial measured build is approximately 217 KiB and 2.6 KiB respectively. Budget increases should be intentional and explained in review. Results go to the Actions job summary, so fork PRs need no comment-write permission.
 
-Visual baselines in `tests/visual/baselines/` cover lithology, section cuts, permeability, and the mobile model. They use Chromium from the lockfile, SwiftShader, fixed viewports, and device scale 1. The model comparisons hide UI overlays and disable axis labels to avoid Linux font differences; mobile controls are checked separately for visibility and interaction. Generate baselines on Linux with `npm run test:visual -- --update-snapshots`, inspect every changed image, and commit intentional changes. CI never regenerates baselines. Browser upgrades may require reviewed baseline updates; software WebGL checks correctness, not hardware performance.
+Visual baselines in `tests/visual/baselines/` cover lithology, section cuts, permeability, the mobile model, and both 2D section maps. They use Chromium from the lockfile, SwiftShader, fixed viewports, and device scale 1. The model comparisons hide UI overlays and disable axis labels to avoid Linux font differences; mobile controls are checked separately for visibility and interaction. Generate baselines on Linux with `npm run test:visual -- --update-snapshots`, inspect every changed image, and commit intentional changes. CI never regenerates baselines. Browser upgrades may require reviewed baseline updates; software WebGL checks correctness, not hardware performance.
 
 Browser failures retain screenshots and traces in `test-results/`; HTML reports are in `playwright-report/`. CI uploads these for seven days, including visual diffs. Open a trace with `npx playwright show-trace <trace.zip>`. To smoke-test an existing deployment, set `PLAYWRIGHT_BASE_URL=https://your-host/project/` when running `npm run test:production`; optionally set `EXPECTED_REVISION` to require an exact commit. The revision check is skipped locally unless that variable is set.
 
 Development conventions are in [AGENTS.md](AGENTS.md).
+
+### Dataset acceptance and hardware profiling
+
+Use the [checkpoint validation and hardware profiling procedure](docs/dataset-validation.md) before claiming real-model accuracy or hardware performance. `python scripts/validate_dataset.py DATASET REFERENCE.json` checks raw sizes, checksums, physical cell centers, missing data and independently supplied expected values without modifying the dataset. Real survey acceptance and hardware measurements remain pending until approved inputs and target devices are available.
+
+The minimum netCDF4 version is 1.7.1.post2: [1.7.0](https://pypi.org/project/netCDF4/1.7.0/) and [1.7.1](https://pypi.org/project/netCDF4/1.7.1/) were withdrawn. TypeScript 7 uses relative alias paths without the removed `baseUrl` option.

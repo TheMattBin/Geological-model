@@ -1,2 +1,2 @@
 numpy>=1.26,<3
-netCDF4>=1.7,<2
+netCDF4>=1.7.1.post2,<2

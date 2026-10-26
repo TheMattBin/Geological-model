@@ -1,0 +1,205 @@
+.dialog {
+  box-sizing: border-box;
+  width: min(1140px, 96vw);
+  max-height: 94dvh;
+  padding: 24px;
+  color: #e2e8f0;
+  background: #16202c;
+  border: 1px solid #64748b;
+  border-radius: 12px;
+  overflow: auto;
+  font:
+    14px/1.5 system-ui,
+    sans-serif;
+}
+.dialog::backdrop {
+  background: rgb(0 0 0 / 65%);
+}
+.dialog h2,
+.dialog h3,
+.dialog p {
+  margin: 0 0 12px;
+}
+.dialog h2 {
+  font-size: 22px;
+}
+.dialog h3 {
+  font-size: 16px;
+}
+.dialog button,
+.dialog select {
+  color: #e2e8f0;
+  background: #293b50;
+  border: 1px solid #64748b;
+  border-radius: 4px;
+  padding: 8px;
+}
+.dialog :focus-visible {
+  outline: 3px solid #5cc9b5;
+  outline-offset: 3px;
+}
+.dialog input[type='range'] {
+  width: 100%;
+  accent-color: #5cc9b5;
+}
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 16px;
+}
+.header button {
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 12px;
+}
+.controls select {
+  display: block;
+}
+.controls label {
+  min-width: 150px;
+}
+.caption {
+  font-size: 12px;
+  color: #bac9d9;
+}
+.plots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+.section {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #42566b;
+  border-radius: 8px;
+}
+.plotArea {
+  height: 350px;
+  display: grid;
+  place-items: center;
+  padding-left: 30px;
+}
+.diagram {
+  flex-shrink: 0;
+}
+.image {
+  position: relative;
+  background: repeating-conic-gradient(#263645 0% 25%, #3d4e5e 0% 50%) 0 / 12px 12px;
+}
+.image canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+.top,
+.bottom {
+  position: absolute;
+  right: calc(100% + 6px);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.top {
+  top: 0;
+}
+.bottom {
+  bottom: 0;
+}
+.vertical {
+  position: absolute;
+  right: calc(100% + 30px);
+  top: 50%;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg) translateY(50%);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.extents {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  font-size: 11px;
+}
+.axis {
+  text-align: center;
+  white-space: nowrap;
+  font-size: 11px;
+}
+.marker {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  transform: translate(-50%, -50%);
+  border: 2px solid white;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px black;
+  pointer-events: none;
+}
+.inspection {
+  min-height: 65px;
+  padding: 8px;
+  background: #101923;
+  border-radius: 4px;
+  font-size: 12px;
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  list-style: none;
+  padding: 0;
+  gap: 16px;
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.legend li span {
+  width: 18px;
+  height: 18px;
+  display: inline-block;
+}
+.continuousLegend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin: 16px 0;
+}
+.continuousLegend > div {
+  width: 180px;
+  height: 18px;
+}
+.dialog footer {
+  border-top: 1px solid #42566b;
+  padding-top: 12px;
+  font-size: 12px;
+}
+@media (max-width: 700px) {
+  .dialog {
+    padding: 14px;
+  }
+  .plots {
+    grid-template-columns: 1fr;
+  }
+  .controls {
+    gap: 12px;
+  }
+  .section {
+    padding: 10px;
+  }
+  .header {
+    gap: 8px;
+  }
+  .header button {
+    max-width: 120px;
+  }
+}

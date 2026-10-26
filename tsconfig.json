@@ -19,16 +19,15 @@
     "noUnusedLocals": false,
     "noUnusedParameters": false,
     "noFallthroughCasesInSwitch": true,
-    
+
     /* Allow JS */
     "allowJs": true,
     "checkJs": false,
 
     /* Paths */
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"],
-      "@three/*": ["src/three/*"]
+      "@/*": ["./src/*"],
+      "@three/*": ["./src/three/*"]
     }
   },
   "include": ["src"],

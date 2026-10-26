@@ -23,7 +23,8 @@ export function readSavedView(hash: string, dataset: string): SavedView | null {
     const finite = (n: unknown) => typeof n === 'number' && Number.isFinite(n);
     const bounded = (n: unknown, min: number, max: number) => finite(n) && Number(n) >= min && Number(n) <= max;
     const vector = (a: unknown) => Array.isArray(a) && a.length === 3 && a.every((n) => bounded(n, -10000, 10000));
-    if (v.version !== 1 || v.dataset !== dataset || !s || !d || !c) return null;
+    if (v.version !== 2 || v.dataset !== dataset || !s || !d || !c) return null;
+    if (typeof v.datasetFingerprint !== 'string' || !/^[a-f0-9]{64}$/.test(v.datasetFingerprint)) return null;
     if (!Number.isSafeInteger(s.variableId) || !bounded(s.exaggeration, 1, 5) || !bounded(s.opacity, 0, 3)) return null;
     if (!bounded(s.sections?.NS, 0, 1) || !bounded(s.sections?.WE, 0, 1) || !finite(s.isovalue)) return null;
     if (
