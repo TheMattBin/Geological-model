@@ -160,6 +160,9 @@ Select one engine with `-- --project=firefox` (or `chromium` / `webkit`). The su
 deployment subpath: both variables, saved views, section endpoints, PNG/CSV downloads, keyboard controls, dialog focus
 containment/restoration, mobile panel navigation and the WebGL failure/retry path. A missing WebGL2 context fails the
 normal viewer tests; it is never treated as a passing compatibility check.
+On Linux machines without a display, Firefox may need
+`LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a npm run test:compatibility -- --project=firefox --headed`.
+CI uses this virtual-display setup for Firefox; Chromium and WebKit run headless.
 
 Each engine runs axe WCAG 2.1 A/AA checks on the desktop controls, mobile panels, both section variables and graphics
 error state. Full axe results (including checks needing manual review), screenshots and failure traces are retained
