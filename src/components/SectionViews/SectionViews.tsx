@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useUIContext } from '@/UIContext';
 import { inspectSection, rasterizeSection, sectionLayout } from '@three/sections';
+import { downloadSection, exportSectionCSV, exportSectionPNG } from '@three/sectionExport';
 import type { VolumeRenderer } from '@three/VolumeRenderer';
 import type {
   ColorStop,
@@ -45,6 +46,9 @@ function SectionPlot({
   const layout = useMemo(() => sectionLayout(source.metadata, orientation, position), [source, orientation, position]);
   const [drawing, setDrawing] = useState(true);
   const [error, setError] = useState('');
+  const [exporting, setExporting] = useState<'PNG' | 'CSV' | null>(null);
+  const [exportMessage, setExportMessage] = useState('');
+  const exportController = useRef<AbortController | null>(null);
   const [selected, setSelected] = useState<[number, number] | null>(null);
   const [sample, setSample] = useState<SectionSample | null>(null);
   const ratio = layout.physicalWidth / (layout.physicalHeight * settings.exaggeration);
@@ -75,6 +79,38 @@ function SectionPlot({
       });
     return () => controller.abort();
   }, [source, layout, style]);
+
+  useEffect(() => {
+    exportController.current?.abort();
+    setExporting(null);
+    setExportMessage('');
+    return () => exportController.current?.abort();
+  }, [source, layout, style, settings.exaggeration]);
+
+  const exportSection = async (format: 'PNG' | 'CSV') => {
+    if (drawing || error || exporting || !canvas.current) return;
+    const controller = new AbortController();
+    exportController.current?.abort();
+    exportController.current = controller;
+    setExporting(format);
+    setExportMessage(`Preparing ${format}…`);
+    try {
+      const blob =
+        format === 'PNG'
+          ? await exportSectionPNG(canvas.current, source, layout, style, settings.exaggeration, controller.signal)
+          : await exportSectionCSV(source, layout, style, settings.exaggeration, controller.signal);
+      controller.signal.throwIfAborted();
+      downloadSection(
+        blob,
+        `geological-${orientation.toLowerCase()}-variable-${source.variable.id}-cell-${layout.cell}.${format.toLowerCase()}`
+      );
+      setExportMessage(`${format} downloaded.`);
+    } catch (reason) {
+      if (!controller.signal.aborted) setExportMessage(reason instanceof Error ? reason.message : 'Export failed.');
+    } finally {
+      if (!controller.signal.aborted) setExporting(null);
+    }
+  };
 
   const inspect = (column: number, row: number) => {
     if (drawing || error) return;
@@ -171,6 +207,34 @@ function SectionPlot({
       <p id={`section-help-${orientation}`} className={styles.caption}>
         Click or tap a cell. Focus the image and use arrow keys; Home/End select corners.
       </p>
+      <div className={styles.exports}>
+        {(['PNG', 'CSV'] as const).map((format) => (
+          <button
+            key={format}
+            disabled={drawing || !!error || exporting !== null}
+            aria-label={`Export ${names[orientation]} ${format}`}
+            onClick={() => void exportSection(format)}
+          >
+            Export {format}
+          </button>
+        ))}
+        {exporting && (
+          <button
+            onClick={() => {
+              exportController.current?.abort();
+              setExporting(null);
+              setExportMessage('Export cancelled.');
+            }}
+          >
+            Cancel export
+          </button>
+        )}
+      </div>
+      {exportMessage && (
+        <p role='status' aria-label={`${names[orientation]} export status`}>
+          {exportMessage}
+        </p>
+      )}
       {drawing && <p role='status'>Drawing {names[orientation]} section…</p>}
       {error && <p role='alert'>{error}</p>}
       <div className={styles.inspection} role='status' aria-label={`${names[orientation]} section inspection`}>

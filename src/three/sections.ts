@@ -69,6 +69,33 @@ function rawAt(source: SectionSource, indices: [number, number, number]): number
   return source.data[(z * d.y + y) * d.x + x];
 }
 
+/** Prepare lookup tables once when inspecting or exporting many cells. */
+export function createSectionInspector(source: SectionSource, layout: SectionLayout, style: SectionStyle) {
+  const classify = classifier(source, style);
+  const labels = new Map(
+    (source.variable.type === 'discrete' ? (source.variable.colormap as DiscreteColor[]) : []).map((c) => [
+      c.value,
+      c.label
+    ])
+  );
+  return (column: number, row: number): SectionSample => {
+    const indices = sectionIndices(layout, column, row);
+    const raw = rawAt(source, indices);
+    const status = classify(raw);
+    return {
+      indices,
+      coordinates: (['x', 'y', 'z'] as const).map((axis, i) => {
+        const bounds = source.metadata.bounds[axis];
+        return bounds.min + ((indices[i] + 0.5) / source.metadata.dimensions[axis]) * (bounds.max - bounds.min);
+      }) as [number, number, number],
+      value: status === 'missing' ? null : physicalValue(raw, source.variable),
+      label: labels.get(raw),
+      unit: source.variable.unit,
+      status
+    };
+  };
+}
+
 export function inspectSection(
   source: SectionSource,
   layout: SectionLayout,
@@ -76,23 +103,7 @@ export function inspectSection(
   column: number,
   row: number
 ): SectionSample {
-  const indices = sectionIndices(layout, column, row);
-  const raw = rawAt(source, indices);
-  const status = classifier(source, style)(raw);
-  return {
-    indices,
-    coordinates: (['x', 'y', 'z'] as const).map((axis, i) => {
-      const bounds = source.metadata.bounds[axis];
-      return bounds.min + ((indices[i] + 0.5) / source.metadata.dimensions[axis]) * (bounds.max - bounds.min);
-    }) as [number, number, number],
-    value: status === 'missing' ? null : physicalValue(raw, source.variable),
-    label:
-      source.variable.type === 'discrete'
-        ? (source.variable.colormap as DiscreteColor[]).find((c) => c.value === raw)?.label
-        : undefined,
-    unit: source.variable.unit,
-    status
-  };
+  return createSectionInspector(source, layout, style)(column, row);
 }
 
 function colorFunction(source: SectionSource) {
@@ -118,7 +129,7 @@ function colorFunction(source: SectionSource) {
   };
 }
 
-function yieldToUI(signal: AbortSignal): Promise<void> {
+export function yieldToUI(signal: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const abort = () => {
       clearTimeout(timer);

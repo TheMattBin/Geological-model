@@ -203,3 +203,17 @@
     max-width: 120px;
   }
 }
+
+.exports {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0;
+}
+.exports button {
+  cursor: pointer;
+}
+.exports button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
