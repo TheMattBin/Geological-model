@@ -149,6 +149,32 @@ Browser failures retain screenshots and traces in `test-results/`; HTML reports 
 
 Development conventions are in [AGENTS.md](AGENTS.md).
 
+### Browser and accessibility checks
+
+Legend buttons keep their text on a dark background with separate metadata-colored swatches
+([viewer screenshot](docs/images/viewer-accessibility.png)); hidden classes have struck-through labels.
+The 3D canvas has an accessible name and directs keyboard users to camera presets and section cell inspection.
+
+Run `npm run build`, `npx playwright install --with-deps chromium firefox webkit`, then `npm run test:compatibility`.
+Select one engine with `-- --project=firefox` (or `chromium` / `webkit`). The suite exercises the production build at the
+deployment subpath: both variables, saved views, section endpoints, PNG/CSV downloads, keyboard controls, dialog focus
+containment/restoration, mobile panel navigation and the WebGL failure/retry path. A missing WebGL2 context fails the
+normal viewer tests; it is never treated as a passing compatibility check.
+
+Each engine runs axe WCAG 2.1 A/AA checks on the desktop controls, mobile panels, both section variables and graphics
+error state. Full axe results (including checks needing manual review), screenshots and failure traces are retained
+with the CI artifacts. These checks detect common accessibility defects; they do not establish full conformance,
+screen-reader usability, Safari/iOS compatibility or hardware performance. Manually check VoiceOver/Safari and
+NVDA/Firefox announcements, focus visibility, zoom and touch behavior on target devices before claiming support.
+CI requires all three browser jobs before deployment and uses the same build artifact as the other production tests.
+
+Python Dependabot routine version PRs are disabled because the requirements already allow current compatible releases.
+Minimum-version constraints are deliberate compatibility tests. Dependabot security updates remain enabled and are
+not affected by `open-pull-requests-limit: 0`, as described in the
+[GitHub security-update documentation](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/secure-your-dependencies/configure-security-updates).
+CI still tests minimum and current Python dependencies. Raise a minimum when a required fix or feature justifies it;
+review major-version upper bounds explicitly. npm and GitHub Actions version updates remain enabled.
+
 ### Dataset acceptance and hardware profiling
 
 Use the [checkpoint validation and hardware profiling procedure](docs/dataset-validation.md) before claiming real-model accuracy or hardware performance. `python scripts/validate_dataset.py DATASET REFERENCE.json` checks raw sizes, checksums, physical cell centers, missing data and independently supplied expected values without modifying the dataset. Real survey acceptance and hardware measurements remain pending until approved inputs and target devices are available.

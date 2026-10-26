@@ -117,7 +117,7 @@ export default function Scene3D({
     };
   }, [dataPath, initialVariableId, initialDatasetFingerprint, onMetadataChange, onRendererChange, onInspection, retry]);
   return (
-    <div className={styles.sceneContainer} ref={containerRef} aria-label='Geological model'>
+    <div className={styles.sceneContainer} ref={containerRef} role='region' aria-label='Geological model'>
       {contextLost && (
         <div className={styles.error} role='status'>
           <p>Graphics connection lost. Waiting for recovery…</p>

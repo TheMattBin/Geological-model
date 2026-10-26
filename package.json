@@ -13,6 +13,7 @@
     "test:data": "python -m unittest discover -s tests -p 'test_*.py'",
     "check:bundle": "node scripts/check-bundle.mjs",
     "test:production": "playwright test --config playwright.production.config.mjs",
+    "test:compatibility": "playwright test --config playwright.compatibility.config.mjs",
     "test:visual": "playwright test --config playwright.visual.config.mjs"
   },
   "repository": {
@@ -35,6 +36,7 @@
   },
   "homepage": "https://github.com/TheMattBin/Geological-model#readme",
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
     "@playwright/test": "^1.64.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.0.0",
@@ -51,6 +53,6 @@
   },
   "type": "module",
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": ">=22.12.0"
   }
 }
