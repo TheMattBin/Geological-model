@@ -37,7 +37,7 @@
   "homepage": "https://github.com/TheMattBin/Geological-model#readme",
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
-    "@playwright/test": "^1.65.0",
+    "@playwright/test": "^1.65.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.0.0",
     "@types/three": "^0.187.0",
